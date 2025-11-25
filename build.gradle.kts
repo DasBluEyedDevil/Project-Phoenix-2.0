@@ -1,0 +1,26 @@
+// Top-level build file for Vitruvian Project Phoenix - Multiplatform
+plugins {
+    // Android plugins - apply false to configure in submodules
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    
+    // Kotlin plugins
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    
+    // Compose Multiplatform
+    alias(libs.plugins.compose.multiplatform) apply false
+    
+    // SQLDelight
+    alias(libs.plugins.sqldelight) apply false
+}
+
+allprojects {
+    // Common configuration for all projects
+}
+
+tasks.register("clean", Delete::class) {
+    delete(rootProject.layout.buildDirectory)
+}

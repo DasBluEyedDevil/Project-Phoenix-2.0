@@ -1,0 +1,70 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Local configuration
+local.properties
+*.local.properties
+
+# Kotlin
+.kotlin/
+*.kotlin_module
+
+# Android
+/captures
+.externalNativeBuild
+.cxx
+
+# iOS
+iosApp/Pods/
+iosApp/*.xcworkspace/
+iosApp/*.xcodeproj/xcuserdata/
+iosApp/*.xcodeproj/project.xcworkspace/
+iosApp/DerivedData/
+
+# Desktop
+/out/
+
+# Test outputs
+test_output.txt
+*.log
+
+# Build artifacts
+*.apk
+*.aab
+*.aar
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.dex
+
+# Generated files
+/generated/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Claude Code / AI tools
+.skills
+docs/LAST_SESSION.md
+.claude
+LAST_SESSION.md
+CHANGELOG.md
+.aider*
+/.devilmcp/
+
+# Reference/decompiled code (not for distribution)
+/reference/
+/vitruvian-decompiled/
+/scripts/
+/apktool.jar
+/vitruvian-official.apk
