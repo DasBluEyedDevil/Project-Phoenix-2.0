@@ -1,22 +1,22 @@
 [versions]
 # Kotlin and KMP
-kotlin = "2.0.21"
-agp = "8.5.2"
-compose-multiplatform = "1.7.1"
+kotlin = "2.1.20"
+agp = "8.13.1"
+compose-multiplatform = "1.8.0"
 
 # Kotlinx
-kotlinx-coroutines = "1.9.0"
-kotlinx-serialization = "1.7.3"
+kotlinx-coroutines = "1.10.2"
+kotlinx-serialization = "1.8.0"
 kotlinx-datetime = "0.6.1"
 
 # Compose
-compose-bom = "2024.10.01"
-compose-navigation = "2.8.3"
-activity-compose = "1.9.3"
+compose-bom = "2025.10.01"
+compose-navigation = "2.9.0"
+activity-compose = "1.10.1"
 
 # AndroidX
-androidx-core = "1.13.1"
-androidx-lifecycle = "2.8.6"
+androidx-core = "1.16.0"
+androidx-lifecycle = "2.9.0"
 androidx-splashscreen = "1.0.1"
 
 # Dependency Injection - Koin (Multiplatform alternative to Hilt)
@@ -24,26 +24,23 @@ koin = "4.0.0"
 koin-compose = "4.0.0"
 
 # Database - SQLDelight (Multiplatform alternative to Room)
-sqldelight = "2.0.2"
+sqldelight = "2.2.1"
 
 # Settings/Preferences - Multiplatform
-multiplatform-settings = "1.2.0"
+multiplatform-settings = "1.3.0"
 
 # BLE
 nordic-ble = "2.11.0"
 
-# Charts
-# Note: Charts will need platform-specific implementations
-
 # Logging
-kermit = "2.0.4"
+kermit = "2.0.5"
 
 # Testing
 junit = "4.13.2"
 junit-version = "1.2.1"
 espresso = "3.6.1"
-mockk = "1.13.13"
-turbine = "1.1.0"
+mockk = "1.13.17"
+turbine = "1.2.0"
 truth = "1.4.4"
 
 [libraries]

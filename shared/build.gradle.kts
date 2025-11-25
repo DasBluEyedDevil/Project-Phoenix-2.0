@@ -10,13 +10,11 @@ plugins {
 kotlin {
     // Android target
     androidTarget {
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
-    
+
     // iOS targets
     listOf(
         iosX64(),
@@ -28,13 +26,11 @@ kotlin {
             isStatic = true
         }
     }
-    
-    // Desktop targets
+
+    // Desktop target
     jvm("desktop") {
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
     
@@ -45,26 +41,34 @@ kotlin {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
+                implementation(compose.materialIconsExtended)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
-                
+
+                // Lifecycle ViewModel for Compose
+                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+
+                // Navigation Compose (Multiplatform)
+                implementation("org.jetbrains.androidx.navigation:navigation-compose:2.8.0-alpha10")
+
                 // Kotlinx
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.kotlinx.datetime)
-                
+
                 // DI - Koin
                 implementation(libs.koin.core)
                 implementation(libs.koin.compose)
-                
+                implementation(libs.koin.compose.viewmodel)
+
                 // Database - SQLDelight
                 implementation(libs.sqldelight.runtime)
                 implementation(libs.sqldelight.coroutines)
-                
+
                 // Settings/Preferences
                 implementation(libs.multiplatform.settings)
                 implementation(libs.multiplatform.settings.coroutines)
-                
+
                 // Logging
                 implementation(libs.kermit)
             }
@@ -126,12 +130,12 @@ kotlin {
 
 android {
     namespace = "com.example.vitruvianredux.shared"
-    compileSdk = 34
-    
+    compileSdk = 35
+
     defaultConfig {
         minSdk = 26
     }
-    
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

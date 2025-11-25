@@ -8,10 +8,8 @@ plugins {
 
 kotlin {
     jvm("desktop") {
-        compilations.all {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
     
@@ -49,23 +47,23 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm)
             
             packageName = "VitruvianProjectPhoenix"
-            packageVersion = "0.1.0"
+            packageVersion = "1.0.0"
             description = "Vitruvian Project Phoenix - Control app for Vitruvian Trainer machines"
             copyright = "© 2024 Vitruvian Project Phoenix Contributors"
             vendor = "Vitruvian Project Phoenix"
             
             linux {
-                iconFile.set(project.file("src/main/resources/icon.png"))
+                iconFile.set(project.file("src/desktopMain/resources/icon.png"))
             }
-            
+
             windows {
-                iconFile.set(project.file("src/main/resources/icon.ico"))
+                iconFile.set(project.file("src/desktopMain/resources/icon.ico"))
                 menuGroup = "Vitruvian Project Phoenix"
                 upgradeUuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
             }
-            
+
             macOS {
-                iconFile.set(project.file("src/main/resources/icon.icns"))
+                iconFile.set(project.file("src/desktopMain/resources/icon.icns"))
                 bundleID = "com.example.vitruvianredux"
             }
         }

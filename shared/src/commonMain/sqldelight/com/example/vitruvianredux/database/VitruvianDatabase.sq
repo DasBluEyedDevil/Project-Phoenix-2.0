@@ -1,24 +1,55 @@
 -- Vitruvian Project Phoenix Database Schema
 -- This will be compiled by SQLDelight to generate type-safe Kotlin code
 
--- Workout sessions table
-CREATE TABLE WorkoutSession (
+-- Exercise Library
+CREATE TABLE Exercise (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    muscleGroup TEXT NOT NULL,
+    muscleGroups TEXT NOT NULL,
+    equipment TEXT NOT NULL,
+    defaultCableConfig TEXT NOT NULL,
+    isFavorite INTEGER NOT NULL DEFAULT 0,
+    isCustom INTEGER NOT NULL DEFAULT 0
+);
+
+-- Exercise Videos
+CREATE TABLE ExerciseVideo (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    exerciseId INTEGER NOT NULL,
-    exerciseName TEXT NOT NULL,
-    startTime INTEGER NOT NULL,
-    endTime INTEGER,
+    exerciseId TEXT NOT NULL,
+    angle TEXT NOT NULL,
+    videoUrl TEXT NOT NULL,
+    thumbnailUrl TEXT NOT NULL,
+    isTutorial INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (exerciseId) REFERENCES Exercise(id) ON DELETE CASCADE
+);
+
+-- Workout sessions table (Matches Domain Model)
+CREATE TABLE WorkoutSession (
+    id TEXT NOT NULL PRIMARY KEY,
+    timestamp INTEGER NOT NULL,
     mode TEXT NOT NULL,
-    targetWeight REAL NOT NULL,
     targetReps INTEGER NOT NULL,
-    completedReps INTEGER NOT NULL DEFAULT 0,
-    totalVolume REAL NOT NULL DEFAULT 0.0
+    weightPerCableKg REAL NOT NULL,
+    progressionKg REAL NOT NULL DEFAULT 0.0,
+    duration INTEGER NOT NULL DEFAULT 0,
+    totalReps INTEGER NOT NULL DEFAULT 0,
+    warmupReps INTEGER NOT NULL DEFAULT 0,
+    workingReps INTEGER NOT NULL DEFAULT 0,
+    isJustLift INTEGER NOT NULL DEFAULT 0,
+    stopAtTop INTEGER NOT NULL DEFAULT 0,
+    eccentricLoad INTEGER NOT NULL DEFAULT 100,
+    echoLevel INTEGER NOT NULL DEFAULT 2,
+    exerciseId TEXT,
+    exerciseName TEXT,
+    routineSessionId TEXT,
+    routineName TEXT
 );
 
 -- Exercise metrics (samples during workout)
 CREATE TABLE MetricSample (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sessionId INTEGER NOT NULL,
+    sessionId TEXT NOT NULL,
     timestamp INTEGER NOT NULL,
     position REAL,
     velocity REAL,
@@ -30,12 +61,13 @@ CREATE TABLE MetricSample (
 -- Personal records
 CREATE TABLE PersonalRecord (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    exerciseId INTEGER NOT NULL,
+    exerciseId TEXT NOT NULL,
     exerciseName TEXT NOT NULL,
     weight REAL NOT NULL,
     reps INTEGER NOT NULL,
     oneRepMax REAL NOT NULL,
-    achievedAt INTEGER NOT NULL
+    achievedAt INTEGER NOT NULL,
+    workoutMode TEXT NOT NULL
 );
 
 -- Custom routines
@@ -51,7 +83,7 @@ CREATE TABLE Routine (
 CREATE TABLE RoutineExercise (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     routineId INTEGER NOT NULL,
-    exerciseId INTEGER NOT NULL,
+    exerciseId TEXT NOT NULL,
     exerciseName TEXT NOT NULL,
     orderIndex INTEGER NOT NULL,
     targetWeight REAL NOT NULL,
@@ -63,66 +95,103 @@ CREATE TABLE RoutineExercise (
 
 -- Queries
 
--- Get all workout sessions
-selectAllSessions:
-SELECT * FROM WorkoutSession ORDER BY startTime DESC;
+-- Exercise Queries
+selectAllExercises:
+SELECT * FROM Exercise ORDER BY name ASC;
 
--- Get session by ID
+searchExercises:
+SELECT * FROM Exercise 
+WHERE name LIKE ('%' || :query || '%') 
+   OR muscleGroups LIKE ('%' || :query || '%')
+ORDER BY name ASC;
+
+filterExercisesByMuscle:
+SELECT * FROM Exercise WHERE muscleGroups LIKE ('%' || :muscle || '%') ORDER BY name ASC;
+
+filterExercisesByEquipment:
+SELECT * FROM Exercise WHERE equipment LIKE ('%' || :equipment || '%') ORDER BY name ASC;
+
+selectFavorites:
+SELECT * FROM Exercise WHERE isFavorite = 1 ORDER BY name ASC;
+
+selectExerciseById:
+SELECT * FROM Exercise WHERE id = ?;
+
+updateFavorite:
+UPDATE Exercise SET isFavorite = ? WHERE id = ?;
+
+insertExercise:
+INSERT OR REPLACE INTO Exercise (id, name, muscleGroup, muscleGroups, equipment, defaultCableConfig, isFavorite, isCustom)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+countExercises:
+SELECT COUNT(*) FROM Exercise;
+
+-- Exercise Video Queries
+selectVideosByExercise:
+SELECT * FROM ExerciseVideo WHERE exerciseId = ?;
+
+insertVideo:
+INSERT INTO ExerciseVideo (exerciseId, angle, videoUrl, thumbnailUrl, isTutorial)
+VALUES (?, ?, ?, ?, ?);
+
+-- Workout Session Queries
+selectAllSessions:
+SELECT * FROM WorkoutSession ORDER BY timestamp DESC;
+
 selectSessionById:
 SELECT * FROM WorkoutSession WHERE id = ?;
 
--- Get recent sessions
 selectRecentSessions:
-SELECT * FROM WorkoutSession ORDER BY startTime DESC LIMIT ?;
+SELECT * FROM WorkoutSession ORDER BY timestamp DESC LIMIT ?;
 
--- Insert session
 insertSession:
-INSERT INTO WorkoutSession (exerciseId, exerciseName, startTime, endTime, mode, targetWeight, targetReps, completedReps, totalVolume)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO WorkoutSession (
+    id, timestamp, mode, targetReps, weightPerCableKg, progressionKg, 
+    duration, totalReps, warmupReps, workingReps, 
+    isJustLift, stopAtTop, eccentricLoad, echoLevel, 
+    exerciseId, exerciseName, routineSessionId, routineName
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
--- Update session
 updateSession:
-UPDATE WorkoutSession SET endTime = ?, completedReps = ?, totalVolume = ? WHERE id = ?;
+UPDATE WorkoutSession 
+SET duration = ?, totalReps = ?, workingReps = ? 
+WHERE id = ?;
 
--- Get metrics for session
+-- Metric Queries
 selectMetricsBySession:
 SELECT * FROM MetricSample WHERE sessionId = ? ORDER BY timestamp ASC;
 
--- Insert metric sample
 insertMetric:
 INSERT INTO MetricSample (sessionId, timestamp, position, velocity, load, power)
 VALUES (?, ?, ?, ?, ?, ?);
 
--- Get all personal records
+-- Personal Record Queries
 selectAllRecords:
 SELECT * FROM PersonalRecord ORDER BY achievedAt DESC;
 
--- Get records for exercise
 selectRecordsByExercise:
 SELECT * FROM PersonalRecord WHERE exerciseId = ? ORDER BY oneRepMax DESC;
 
--- Insert personal record
 insertRecord:
-INSERT INTO PersonalRecord (exerciseId, exerciseName, weight, reps, oneRepMax, achievedAt)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO PersonalRecord (exerciseId, exerciseName, weight, reps, oneRepMax, achievedAt, workoutMode)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
--- Get all routines
+-- Routine Queries
 selectAllRoutines:
 SELECT * FROM Routine ORDER BY name ASC;
 
--- Get routine by ID
 selectRoutineById:
 SELECT * FROM Routine WHERE id = ?;
 
--- Insert routine
 insertRoutine:
 INSERT INTO Routine (name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?);
 
--- Get exercises for routine
+-- Routine Exercise Queries
 selectExercisesByRoutine:
 SELECT * FROM RoutineExercise WHERE routineId = ? ORDER BY orderIndex ASC;
 
--- Insert routine exercise
 insertRoutineExercise:
 INSERT INTO RoutineExercise (routineId, exerciseId, exerciseName, orderIndex, targetWeight, targetReps, targetSets, mode)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?);

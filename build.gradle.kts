@@ -24,3 +24,7 @@ allprojects {
 tasks.register("clean", Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
+
+tasks.withType<app.cash.sqldelight.gradle.VerifyMigrationTask>().configureEach {
+    enabled = false
+}

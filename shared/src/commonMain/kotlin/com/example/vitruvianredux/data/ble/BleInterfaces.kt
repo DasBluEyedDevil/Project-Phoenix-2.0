@@ -1,7 +1,7 @@
 package com.example.vitruvianredux.data.ble
 
 import com.example.vitruvianredux.domain.model.ConnectionState
-import com.example.vitruvianredux.domain.model.WorkoutMetrics
+import com.example.vitruvianredux.domain.model.WorkoutMetric
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -44,7 +44,7 @@ interface BleConnection {
     /**
      * Flow of real-time workout metrics from the device.
      */
-    val metrics: Flow<WorkoutMetrics>
+    val metrics: Flow<WorkoutMetric>
     
     /**
      * Connect to a Vitruvian device.
