@@ -1,0 +1,128 @@
+-- Vitruvian Project Phoenix Database Schema
+-- This will be compiled by SQLDelight to generate type-safe Kotlin code
+
+-- Workout sessions table
+CREATE TABLE WorkoutSession (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exerciseId INTEGER NOT NULL,
+    exerciseName TEXT NOT NULL,
+    startTime INTEGER NOT NULL,
+    endTime INTEGER,
+    mode TEXT NOT NULL,
+    targetWeight REAL NOT NULL,
+    targetReps INTEGER NOT NULL,
+    completedReps INTEGER NOT NULL DEFAULT 0,
+    totalVolume REAL NOT NULL DEFAULT 0.0
+);
+
+-- Exercise metrics (samples during workout)
+CREATE TABLE MetricSample (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessionId INTEGER NOT NULL,
+    timestamp INTEGER NOT NULL,
+    position REAL,
+    velocity REAL,
+    load REAL,
+    power REAL,
+    FOREIGN KEY (sessionId) REFERENCES WorkoutSession(id) ON DELETE CASCADE
+);
+
+-- Personal records
+CREATE TABLE PersonalRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exerciseId INTEGER NOT NULL,
+    exerciseName TEXT NOT NULL,
+    weight REAL NOT NULL,
+    reps INTEGER NOT NULL,
+    oneRepMax REAL NOT NULL,
+    achievedAt INTEGER NOT NULL
+);
+
+-- Custom routines
+CREATE TABLE Routine (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+);
+
+-- Routine exercises
+CREATE TABLE RoutineExercise (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    routineId INTEGER NOT NULL,
+    exerciseId INTEGER NOT NULL,
+    exerciseName TEXT NOT NULL,
+    orderIndex INTEGER NOT NULL,
+    targetWeight REAL NOT NULL,
+    targetReps INTEGER NOT NULL,
+    targetSets INTEGER NOT NULL,
+    mode TEXT NOT NULL,
+    FOREIGN KEY (routineId) REFERENCES Routine(id) ON DELETE CASCADE
+);
+
+-- Queries
+
+-- Get all workout sessions
+selectAllSessions:
+SELECT * FROM WorkoutSession ORDER BY startTime DESC;
+
+-- Get session by ID
+selectSessionById:
+SELECT * FROM WorkoutSession WHERE id = ?;
+
+-- Get recent sessions
+selectRecentSessions:
+SELECT * FROM WorkoutSession ORDER BY startTime DESC LIMIT ?;
+
+-- Insert session
+insertSession:
+INSERT INTO WorkoutSession (exerciseId, exerciseName, startTime, endTime, mode, targetWeight, targetReps, completedReps, totalVolume)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Update session
+updateSession:
+UPDATE WorkoutSession SET endTime = ?, completedReps = ?, totalVolume = ? WHERE id = ?;
+
+-- Get metrics for session
+selectMetricsBySession:
+SELECT * FROM MetricSample WHERE sessionId = ? ORDER BY timestamp ASC;
+
+-- Insert metric sample
+insertMetric:
+INSERT INTO MetricSample (sessionId, timestamp, position, velocity, load, power)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- Get all personal records
+selectAllRecords:
+SELECT * FROM PersonalRecord ORDER BY achievedAt DESC;
+
+-- Get records for exercise
+selectRecordsByExercise:
+SELECT * FROM PersonalRecord WHERE exerciseId = ? ORDER BY oneRepMax DESC;
+
+-- Insert personal record
+insertRecord:
+INSERT INTO PersonalRecord (exerciseId, exerciseName, weight, reps, oneRepMax, achievedAt)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- Get all routines
+selectAllRoutines:
+SELECT * FROM Routine ORDER BY name ASC;
+
+-- Get routine by ID
+selectRoutineById:
+SELECT * FROM Routine WHERE id = ?;
+
+-- Insert routine
+insertRoutine:
+INSERT INTO Routine (name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?);
+
+-- Get exercises for routine
+selectExercisesByRoutine:
+SELECT * FROM RoutineExercise WHERE routineId = ? ORDER BY orderIndex ASC;
+
+-- Insert routine exercise
+insertRoutineExercise:
+INSERT INTO RoutineExercise (routineId, exerciseId, exerciseName, orderIndex, targetWeight, targetReps, targetSets, mode)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);

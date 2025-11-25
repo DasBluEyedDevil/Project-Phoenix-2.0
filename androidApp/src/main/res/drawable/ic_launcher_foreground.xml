@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Phoenix symbol - stylized flame -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,24c0,0 -12,20 -12,36c0,12 8,20 12,20c4,0 12,-8 12,-20C66,44 54,24 54,24z"/>
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M54,36c0,0 -6,10 -6,18c0,6 4,10 6,10c2,0 6,-4 6,-10C60,46 54,36 54,36z"/>
+</vector>
