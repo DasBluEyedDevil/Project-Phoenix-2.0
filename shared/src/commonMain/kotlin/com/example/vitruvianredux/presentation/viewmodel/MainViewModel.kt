@@ -7,14 +7,17 @@ import com.example.vitruvianredux.data.preferences.UserPreferences
 import com.example.vitruvianredux.data.repository.AutoStopUiState
 import com.example.vitruvianredux.data.repository.BleRepository
 import com.example.vitruvianredux.data.repository.ExerciseRepository
-import com.example.vitruvianredux.data.repository.HandleState
+import com.example.vitruvianredux.data.repository.HandleActivityState
 import com.example.vitruvianredux.data.repository.PersonalRecordRepository
+import com.example.vitruvianredux.data.repository.RepNotification
 import com.example.vitruvianredux.data.repository.ScannedDevice
 import com.example.vitruvianredux.data.repository.WorkoutRepository
 import co.touchlab.kermit.Logger
 import com.example.vitruvianredux.domain.model.*
 import com.example.vitruvianredux.domain.usecase.RepCounterFromMachine
 import com.example.vitruvianredux.util.BlePacketFactory
+import com.example.vitruvianredux.util.KmpLocalDate
+import com.example.vitruvianredux.util.KmpUtils
 import com.example.vitruvianredux.util.format
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,7 +33,6 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -77,6 +79,15 @@ class MainViewModel constructor(
     companion object {
         /** Prefix for temporary single exercise routines to identify them for cleanup */
         const val TEMP_SINGLE_EXERCISE_PREFIX = "temp_single_"
+
+        /** Auto-stop duration in seconds (time handles must be released before auto-stop triggers) */
+        const val AUTO_STOP_DURATION_SECONDS = 3f
+
+        /** Position threshold to consider handle at rest */
+        const val HANDLE_REST_THRESHOLD = 2.5
+
+        /** Minimum position range to consider "meaningful" for auto-stop detection */
+        const val MIN_RANGE_THRESHOLD = 50
     }
 
     val connectionState: StateFlow<ConnectionState> = bleRepository.connectionState
@@ -256,7 +267,41 @@ class MainViewModel constructor(
         sessions.size.takeIf { it > 0 }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val workoutStreak: StateFlow<Int?> = MutableStateFlow(null)
+    /**
+     * Calculate current workout streak (consecutive days with workouts).
+     * Returns null if no workouts or streak is broken.
+     */
+    val workoutStreak: StateFlow<Int?> = allWorkoutSessions.map { sessions ->
+        if (sessions.isEmpty()) {
+            return@map null
+        }
+
+        // Get unique workout dates, sorted descending (most recent first)
+        val workoutDates = sessions
+            .map { KmpLocalDate.fromTimestamp(it.timestamp) }
+            .distinctBy { it.toKey() }
+            .sortedDescending()
+
+        val today = KmpLocalDate.today()
+        val lastWorkoutDate = workoutDates.first()
+
+        // Check if streak is current (workout today or yesterday)
+        if (lastWorkoutDate.isBefore(today.minusDays(1))) {
+            return@map null // Streak broken - no workout today or yesterday
+        }
+
+        // Count consecutive days
+        var streak = 1
+        for (i in 1 until workoutDates.size) {
+            val expected = workoutDates[i - 1].minusDays(1)
+            if (workoutDates[i] == expected) {
+                streak++
+            } else {
+                break // Found a gap
+            }
+        }
+        streak
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val progressPercentage: StateFlow<Int?> = allWorkoutSessions.map { sessions ->
         if (sessions.size < 2) return@map null
@@ -296,8 +341,20 @@ class MainViewModel constructor(
     private var currentRoutineName: String? = null
 
     private var autoStopStartTime: Long? = null
+    private var autoStopTriggered = false
+    private var autoStopStopRequested = false
+    private var currentHandleState: HandleActivityState = HandleActivityState.WaitingForRest
+
     private var connectionJob: Job? = null
     private var monitorDataCollectionJob: Job? = null
+    private var autoStartJob: Job? = null
+    private var restTimerJob: Job? = null
+    private var bodyweightTimerJob: Job? = null
+    private var repEventsCollectionJob: Job? = null
+
+    // Session-level peak loads (for analytics/debugging)
+    private var maxConcentricPerCableKgThisSession: Float = 0f
+    private var maxEccentricPerCableKgThisSession: Float = 0f
 
     init {
         Logger.d("MainViewModel initialized")
@@ -342,6 +399,65 @@ class MainViewModel constructor(
                  }
              }
         }
+
+        // Handle state collector for auto-start functionality
+        viewModelScope.launch {
+            bleRepository.handleState.collect { handleState ->
+                val handlesDetected = handleState.leftDetected || handleState.rightDetected
+                val params = _workoutParameters.value
+                val currentState = _workoutState.value
+                val isIdle = currentState is WorkoutState.Idle
+                val isSummaryAndJustLift = currentState is WorkoutState.SetSummary && params.isJustLift
+
+                // Auto-start logic: when handles are grabbed in idle state
+                if (params.useAutoStart && (isIdle || isSummaryAndJustLift)) {
+                    if (handlesDetected) {
+                        startAutoStartTimer()
+                    } else {
+                        cancelAutoStartTimer()
+                    }
+                }
+
+                // Track handle activity state
+                currentHandleState = when {
+                    currentState is WorkoutState.Active && handlesDetected -> HandleActivityState.Active
+                    currentState is WorkoutState.SetSummary -> HandleActivityState.SetComplete
+                    else -> HandleActivityState.WaitingForRest
+                }
+            }
+        }
+
+        // Rep events collector for handling machine rep notifications
+        repEventsCollectionJob = viewModelScope.launch {
+            bleRepository.repEvents.collect { notification ->
+                val state = _workoutState.value
+                if (state is WorkoutState.Active) {
+                    handleRepNotification(notification)
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle rep notification from the machine.
+     * Updates rep counter and position ranges for visualization.
+     */
+    private fun handleRepNotification(notification: RepNotification) {
+        val currentPositions = _currentMetric.value
+
+        // Use machine's ROM and Set counters directly (official app method)
+        repCounter.process(
+            repsRomCount = notification.repsRomCount,
+            repsSetCount = notification.repsSetCount,
+            up = notification.topCounter,
+            down = notification.completeCounter,
+            posA = currentPositions?.positionA ?: 0,
+            posB = currentPositions?.positionB ?: 0
+        )
+
+        // Update rep count and ranges for UI
+        _repCount.value = repCounter.getRepCount()
+        _repRanges.value = repCounter.getRepRanges()
     }
 
     fun startScanning() {
@@ -372,8 +488,45 @@ class MainViewModel constructor(
         }
 
         viewModelScope.launch {
-            // 1. Build Command
             val params = _workoutParameters.value
+
+            // Check for bodyweight exercise
+            val currentExercise = _loadedRoutine.value?.exercises?.getOrNull(_currentExerciseIndex.value)
+            val isBodyweight = isBodyweightExercise(currentExercise)
+            val bodyweightDuration = if (isBodyweight) currentExercise?.duration else null
+
+            // For bodyweight exercises with duration, skip machine commands
+            if (isBodyweight && bodyweightDuration != null) {
+                // Bodyweight duration-based exercise (e.g., plank, wall sit)
+                Logger.d("Starting bodyweight exercise: ${currentExercise?.exercise?.name} for ${bodyweightDuration}s")
+
+                // Countdown
+                if (!skipCountdown) {
+                    for (i in 5 downTo 1) {
+                        _workoutState.value = WorkoutState.Countdown(i)
+                        delay(1000)
+                    }
+                }
+
+                // Start timer
+                _workoutState.value = WorkoutState.Active
+                workoutStartTime = currentTimeMillis()
+                currentSessionId = KmpUtils.randomUUID()
+                _hapticEvents.emit(HapticEvent.WORKOUT_START)
+
+                // Bodyweight timer - auto-complete after duration
+                bodyweightTimerJob?.cancel()
+                bodyweightTimerJob = viewModelScope.launch {
+                    delay(bodyweightDuration * 1000L)
+                    handleSetCompletion()
+                }
+
+                return@launch
+            }
+
+            // Normal cable-based exercise
+
+            // 1. Build Command
             val command = if (params.workoutType is WorkoutType.Program) {
                 BlePacketFactory.createWorkoutCommand(
                     params.workoutType,
@@ -395,6 +548,7 @@ class MainViewModel constructor(
             }
 
             // 3. Reset State
+            currentSessionId = KmpUtils.randomUUID()
             _repCount.value = RepCount()
             repCounter.reset()
             repCounter.configure(
@@ -404,7 +558,7 @@ class MainViewModel constructor(
                 stopAtTop = params.stopAtTop,
                 isAMRAP = params.isAMRAP
             )
-            
+
             // 4. Countdown
             if (!skipCountdown && !isJustLiftMode) {
                 for (i in 5 downTo 1) {
@@ -412,7 +566,7 @@ class MainViewModel constructor(
                     delay(1000)
                 }
             }
-            
+
             // 5. Start Monitoring
             _workoutState.value = WorkoutState.Active
             workoutStartTime = currentTimeMillis()
@@ -435,14 +589,20 @@ class MainViewModel constructor(
                  )
                  
                  _repCount.value = repCounter.getRepCount()
-                 
-                 // Just Lift Auto-Stop
-                 if (isJustLift && repCounter.hasMeaningfulRange()) {
-                     // Implementation for Just Lift auto-stop logic would go here
-                     // using repCounter.isInDangerZone(...)
+
+                 // Update position ranges continuously for Just Lift mode
+                 if (isJustLift) {
+                     repCounter.updatePositionRangesContinuously(metric.positionA, metric.positionB)
                  }
 
-                 // Standard Auto-Stop
+                 // Just Lift Auto-Stop (danger zone detection)
+                 // Note: AMRAP mode explicitly disables auto-stop
+                 val params = _workoutParameters.value
+                 if (params.isJustLift && !params.isAMRAP) {
+                     checkAutoStop(metric)
+                 }
+
+                 // Standard Auto-Stop (rep target reached)
                  if (repCounter.shouldStopWorkout()) {
                      stopWorkout()
                  }
@@ -489,11 +649,6 @@ class MainViewModel constructor(
 
     fun resumeWorkout() {
         _workoutState.value = WorkoutState.Active
-    }
-
-    fun skipRest() {
-        // TODO: Cancel rest timer job
-        proceedFromSummary()
     }
 
     fun setWeightUnit(unit: WeightUnit) {
@@ -674,8 +829,16 @@ class MainViewModel constructor(
      */
     fun enableHandleDetection() {
         Logger.d("MainViewModel: Enabling handle detection for auto-start")
-        // TODO: Implement BLE handle detection when BleRepository supports it
-        // bleRepository.enableHandleDetection()
+        bleRepository.enableHandleDetection(true)
+    }
+
+    /**
+     * Disable handle detection.
+     * Called when leaving Just Lift mode or when handle detection is no longer needed.
+     */
+    fun disableHandleDetection() {
+        Logger.d("MainViewModel: Disabling handle detection")
+        bleRepository.enableHandleDetection(false)
     }
 
     /**
@@ -735,6 +898,581 @@ class MainViewModel constructor(
             // TODO: Implement preferences storage for Just Lift defaults
             // preferencesManager.saveJustLiftDefaults(defaults)
             Logger.d("saveJustLiftDefaults: weight=${defaults.weightPerCableKg}kg, mode=${defaults.workoutModeId}")
+        }
+    }
+
+    // ========== Auto-Stop Helper Functions ==========
+
+    // ==================== AUTO-START FUNCTIONS ====================
+
+    /**
+     * Start the auto-start countdown timer (5 seconds).
+     * When user grabs handles while in Idle or SetSummary state, this starts
+     * a countdown and automatically begins the workout.
+     */
+    private fun startAutoStartTimer() {
+        // Don't start if already running or not in appropriate state
+        if (autoStartJob != null) return
+        val currentState = _workoutState.value
+        if (currentState !is WorkoutState.Idle && currentState !is WorkoutState.SetSummary) {
+            return
+        }
+
+        autoStartJob = viewModelScope.launch {
+            // 5-second countdown with visible progress
+            for (i in 5 downTo 1) {
+                _autoStartCountdown.value = i
+                delay(1000)
+            }
+            _autoStartCountdown.value = null
+
+            // Auto-start the workout in Just Lift mode
+            if (_workoutParameters.value.isJustLift) {
+                startWorkout(skipCountdown = true, isJustLiftMode = true)
+            } else {
+                startWorkout(skipCountdown = false, isJustLiftMode = false)
+            }
+        }
+    }
+
+    /**
+     * Cancel the auto-start countdown timer.
+     * Called when user releases handles before countdown completes.
+     */
+    private fun cancelAutoStartTimer() {
+        autoStartJob?.cancel()
+        autoStartJob = null
+        _autoStartCountdown.value = null
+    }
+
+    // ==================== AUTO-STOP FUNCTIONS ====================
+
+    /**
+     * Check if auto-stop should be triggered based on position and danger zone detection.
+     * Called on every metric update during Just Lift mode.
+     *
+     * Auto-stop triggers when:
+     * 1. Meaningful position range has been established (user has performed movements)
+     * 2. Handles are in the danger zone (near minimum position)
+     * 3. Handles appear to be released (velocity low or position matches rest)
+     * 4. This condition persists for AUTO_STOP_DURATION_SECONDS
+     */
+    private fun checkAutoStop(metric: WorkoutMetric) {
+        // Don't check if workout isn't active
+        if (_workoutState.value !is WorkoutState.Active) {
+            resetAutoStopTimer()
+            return
+        }
+
+        // Need meaningful range to detect danger zone
+        if (!repCounter.hasMeaningfulRange(MIN_RANGE_THRESHOLD)) {
+            resetAutoStopTimer()
+            return
+        }
+
+        val inDangerZone = repCounter.isInDangerZone(metric.positionA, metric.positionB, MIN_RANGE_THRESHOLD)
+        val repRanges = repCounter.getRepRanges()
+
+        // Check if cable appears to be released (position near minimum with low velocity)
+        var cableAppearsReleased = false
+
+        // Check cable A
+        repRanges.minPosA?.let { minA ->
+            repRanges.maxPosA?.let { maxA ->
+                val rangeA = maxA - minA
+                if (rangeA > MIN_RANGE_THRESHOLD) {
+                    val thresholdA = minA + (rangeA * 0.05f).toInt()
+                    val cableAInDanger = metric.positionA <= thresholdA
+                    // Consider released if position is very close to minimum
+                    val cableAReleased = (metric.positionA - minA) < 10 ||
+                            kotlin.math.abs(metric.velocityA) < HANDLE_REST_THRESHOLD
+                    if (cableAInDanger && cableAReleased) {
+                        cableAppearsReleased = true
+                    }
+                }
+            }
+        }
+
+        // Check cable B (if not already released)
+        if (!cableAppearsReleased) {
+            repRanges.minPosB?.let { minB ->
+                repRanges.maxPosB?.let { maxB ->
+                    val rangeB = maxB - minB
+                    if (rangeB > MIN_RANGE_THRESHOLD) {
+                        val thresholdB = minB + (rangeB * 0.05f).toInt()
+                        val cableBInDanger = metric.positionB <= thresholdB
+                        val cableBReleased = (metric.positionB - minB) < 10 ||
+                                kotlin.math.abs(metric.velocityB) < HANDLE_REST_THRESHOLD
+                        if (cableBInDanger && cableBReleased) {
+                            cableAppearsReleased = true
+                        }
+                    }
+                }
+            }
+        }
+
+        // Trigger auto-stop countdown if in danger zone AND cable appears released
+        if (inDangerZone && cableAppearsReleased) {
+            val startTime = autoStopStartTime ?: run {
+                autoStopStartTime = currentTimeMillis()
+                currentTimeMillis()
+            }
+
+            val elapsed = (currentTimeMillis() - startTime) / 1000f
+            val progress = (elapsed / AUTO_STOP_DURATION_SECONDS).coerceIn(0f, 1f)
+            val remaining = (AUTO_STOP_DURATION_SECONDS - elapsed).coerceAtLeast(0f)
+
+            _autoStopState.value = AutoStopUiState(
+                isActive = true,
+                progress = progress,
+                secondsRemaining = ceil(remaining).toInt()
+            )
+
+            // Trigger auto-stop if timer expired
+            if (elapsed >= AUTO_STOP_DURATION_SECONDS && !autoStopTriggered) {
+                requestAutoStop()
+            }
+        } else {
+            // User resumed activity, reset timer
+            resetAutoStopTimer()
+        }
+    }
+
+    /**
+     * Reset auto-stop timer without resetting the triggered flag.
+     * Call this when user activity resumes (handles moved, etc.)
+     */
+    private fun resetAutoStopTimer() {
+        autoStopStartTime = null
+        if (!autoStopTriggered) {
+            _autoStopState.value = AutoStopUiState()
+        }
+    }
+
+    /**
+     * Fully reset auto-stop state for a new workout/set.
+     * Call this when starting a new workout or set.
+     */
+    private fun resetAutoStopState() {
+        autoStopStartTime = null
+        autoStopTriggered = false
+        autoStopStopRequested = false
+        _autoStopState.value = AutoStopUiState()
+    }
+
+    /**
+     * Request auto-stop (thread-safe, only triggers once).
+     */
+    private fun requestAutoStop() {
+        if (autoStopStopRequested) return
+        autoStopStopRequested = true
+        triggerAutoStop()
+    }
+
+    /**
+     * Trigger auto-stop and handle set completion.
+     */
+    private fun triggerAutoStop() {
+        Logger.d("triggerAutoStop() called")
+        autoStopTriggered = true
+
+        // Update UI state
+        if (_workoutParameters.value.isJustLift || _workoutParameters.value.isAMRAP) {
+            _autoStopState.value = _autoStopState.value.copy(
+                progress = 1f,
+                secondsRemaining = 0,
+                isActive = true
+            )
+        } else {
+            _autoStopState.value = AutoStopUiState()
+        }
+
+        // Handle set completion
+        handleSetCompletion()
+    }
+
+    /**
+     * Handle automatic set completion (when rep target is reached via auto-stop).
+     * This is DIFFERENT from user manually stopping.
+     */
+    private fun handleSetCompletion() {
+        viewModelScope.launch {
+            val params = _workoutParameters.value
+            val isJustLift = params.isJustLift
+
+            Logger.d("handleSetCompletion: isJustLift=$isJustLift")
+
+            // Stop hardware
+            bleRepository.sendWorkoutCommand(BlePacketFactory.createStopCommand())
+            _hapticEvents.emit(HapticEvent.WORKOUT_END)
+
+            // Save session
+            saveWorkoutSession()
+
+            // Calculate metrics for summary
+            val peakPerCableKg = if (collectedMetrics.isNotEmpty()) {
+                collectedMetrics.maxOf { it.totalLoad } / 2f
+            } else {
+                params.weightPerCableKg
+            }
+
+            val averagePerCableKg = if (collectedMetrics.isNotEmpty()) {
+                collectedMetrics.map { it.totalLoad / 2f }.average().toFloat()
+            } else {
+                params.weightPerCableKg
+            }
+
+            val completedReps = _repCount.value.workingReps
+
+            // Show set summary
+            _workoutState.value = WorkoutState.SetSummary(
+                metrics = collectedMetrics.toList(),
+                peakPower = peakPerCableKg,
+                averagePower = averagePerCableKg,
+                repCount = completedReps
+            )
+
+            Logger.d("Set summary: peakPerCableKg=$peakPerCableKg, avgPerCableKg=$averagePerCableKg, reps=$completedReps")
+
+            // Handle based on workout mode
+            if (isJustLift) {
+                // Just Lift mode: Auto-advance to next set after showing summary
+                repCounter.reset()
+                resetAutoStopState()
+                enableHandleDetection()
+
+                delay(5000) // Show summary for 5 seconds
+
+                if (_workoutState.value is WorkoutState.SetSummary) {
+                    resetForNewWorkout()
+                    _workoutState.value = WorkoutState.Idle
+                }
+            } else {
+                // Routine/Program mode: Start rest timer
+                delay(2000) // Brief summary display
+
+                if (_workoutState.value is WorkoutState.SetSummary) {
+                    repCounter.resetCountsOnly()
+                    resetAutoStopState()
+                    startRestTimer()
+                }
+            }
+        }
+    }
+
+    /**
+     * Save workout session to database and check for personal records.
+     */
+    private suspend fun saveWorkoutSession() {
+        val sessionId = currentSessionId ?: return
+        val params = _workoutParameters.value
+        val warmup = _repCount.value.warmupReps
+        val working = _repCount.value.workingReps
+        val duration = currentTimeMillis() - workoutStartTime
+
+        // Calculate actual measured weight from metrics (if available)
+        val measuredPerCableKg = if (collectedMetrics.isNotEmpty()) {
+            collectedMetrics.maxOf { it.totalLoad } / 2f
+        } else {
+            params.weightPerCableKg
+        }
+
+        val session = WorkoutSession(
+            id = sessionId,
+            timestamp = workoutStartTime,
+            mode = params.workoutType.displayName,
+            reps = params.reps,
+            weightPerCableKg = measuredPerCableKg,
+            progressionKg = params.progressionRegressionKg,
+            duration = duration,
+            totalReps = working,
+            warmupReps = warmup,
+            workingReps = working,
+            isJustLift = params.isJustLift,
+            stopAtTop = params.stopAtTop,
+            exerciseId = params.selectedExerciseId,
+            routineSessionId = currentRoutineSessionId,
+            routineName = currentRoutineName
+        )
+
+        workoutRepository.saveSession(session)
+
+        if (collectedMetrics.isNotEmpty()) {
+            workoutRepository.saveMetrics(sessionId, collectedMetrics)
+        }
+
+        Logger.d("Saved workout session: $sessionId with ${collectedMetrics.size} metrics")
+
+        // Check for personal record (skip for Just Lift and Echo modes)
+        params.selectedExerciseId?.let { exerciseId ->
+            val isEchoMode = params.workoutType is WorkoutType.Echo
+            if (working > 0 && !params.isJustLift && !isEchoMode) {
+                try {
+                    workoutRepository.updatePRIfBetter(
+                        exerciseId = exerciseId,
+                        weightKg = measuredPerCableKg,
+                        reps = working,
+                        mode = params.workoutType.displayName
+                    )
+
+                    // Check if this was a new PR by querying existing records
+                    // For now, emit celebration event optimistically for good performance
+                    if (measuredPerCableKg >= params.weightPerCableKg && working >= params.reps) {
+                        val exercise = exerciseRepository.getExerciseById(exerciseId)
+                        _prCelebrationEvent.emit(
+                            PRCelebrationEvent(
+                                exerciseName = exercise?.name ?: "Unknown Exercise",
+                                weightPerCableKg = measuredPerCableKg,
+                                reps = working,
+                                workoutMode = params.workoutType.displayName
+                            )
+                        )
+                        Logger.d("Potential PR: ${exercise?.name} - $measuredPerCableKg kg x $working reps")
+                    }
+                } catch (e: Exception) {
+                    Logger.e(e) { "Error checking PR: ${e.message}" }
+                }
+            }
+        }
+    }
+
+    /**
+     * Check if current workout is in single exercise mode.
+     */
+    private fun isSingleExerciseMode(): Boolean {
+        val routine = _loadedRoutine.value
+        return routine == null || routine.id.startsWith(TEMP_SINGLE_EXERCISE_PREFIX)
+    }
+
+    /**
+     * Check if the given exercise is a bodyweight exercise.
+     */
+    private fun isBodyweightExercise(exercise: RoutineExercise?): Boolean {
+        return exercise?.let {
+            val equipment = it.exercise.equipment
+            equipment.isEmpty() || equipment.equals("bodyweight", ignoreCase = true)
+        } ?: false
+    }
+
+    // ==================== REST TIMER & SET PROGRESSION ====================
+
+    /**
+     * Start the rest timer between sets.
+     * Counts down and either auto-starts next set (if autoplay enabled) or waits for user.
+     */
+    private fun startRestTimer() {
+        restTimerJob?.cancel()
+
+        restTimerJob = viewModelScope.launch {
+            val routine = _loadedRoutine.value
+            val currentExercise = routine?.exercises?.getOrNull(_currentExerciseIndex.value)
+
+            val completedSetIndex = _currentSetIndex.value
+            val restDuration = currentExercise?.getRestForSet(completedSetIndex)?.takeIf { it > 0 } ?: 90
+            val autoplay = autoplayEnabled.value
+
+            val isSingleExercise = isSingleExerciseMode()
+
+            // Countdown
+            for (i in restDuration downTo 1) {
+                val nextName = calculateNextExerciseName(isSingleExercise, currentExercise, routine)
+
+                _workoutState.value = WorkoutState.Resting(
+                    restSecondsRemaining = i,
+                    nextExerciseName = nextName,
+                    isLastExercise = calculateIsLastExercise(isSingleExercise, currentExercise, routine),
+                    currentSet = _currentSetIndex.value + 1,
+                    totalSets = currentExercise?.setReps?.size ?: 0
+                )
+                delay(1000)
+            }
+
+            if (autoplay) {
+                if (isSingleExercise) {
+                    advanceToNextSetInSingleExercise()
+                } else {
+                    startNextSetOrExercise()
+                }
+            } else {
+                // Stay in resting state with 0 seconds - user must manually start
+                _workoutState.value = WorkoutState.Resting(
+                    restSecondsRemaining = 0,
+                    nextExerciseName = calculateNextExerciseName(isSingleExercise, currentExercise, routine),
+                    isLastExercise = calculateIsLastExercise(isSingleExercise, currentExercise, routine),
+                    currentSet = _currentSetIndex.value + 1,
+                    totalSets = currentExercise?.setReps?.size ?: 0
+                )
+            }
+        }
+    }
+
+    /**
+     * Calculate the name of the next exercise/set for display during rest.
+     */
+    private fun calculateNextExerciseName(
+        isSingleExercise: Boolean,
+        currentExercise: RoutineExercise?,
+        routine: Routine?
+    ): String {
+        if (isSingleExercise || currentExercise == null) {
+            return currentExercise?.exercise?.name ?: "Next Set"
+        }
+
+        // Check if more sets in current exercise
+        if (_currentSetIndex.value < (currentExercise.setReps.size - 1)) {
+            return "${currentExercise.exercise.name} - Set ${_currentSetIndex.value + 2}"
+        }
+
+        // Moving to next exercise
+        val nextExercise = routine?.exercises?.getOrNull(_currentExerciseIndex.value + 1)
+        return nextExercise?.exercise?.name ?: "Routine Complete"
+    }
+
+    /**
+     * Check if current exercise is the last one in the routine.
+     */
+    private fun calculateIsLastExercise(
+        isSingleExercise: Boolean,
+        currentExercise: RoutineExercise?,
+        routine: Routine?
+    ): Boolean {
+        if (isSingleExercise) {
+            // For single exercise, check if this is the last set
+            return _currentSetIndex.value >= (currentExercise?.setReps?.size ?: 1) - 1
+        }
+
+        // Check if last exercise in routine
+        val isLastExerciseInRoutine = _currentExerciseIndex.value >= (routine?.exercises?.size ?: 1) - 1
+        val isLastSetInExercise = _currentSetIndex.value >= (currentExercise?.setReps?.size ?: 1) - 1
+
+        return isLastExerciseInRoutine && isLastSetInExercise
+    }
+
+    /**
+     * Advance to the next set within a single exercise (non-routine mode).
+     */
+    private fun advanceToNextSetInSingleExercise() {
+        val routine = _loadedRoutine.value ?: return
+        val currentExercise = routine.exercises.getOrNull(_currentExerciseIndex.value) ?: return
+
+        if (_currentSetIndex.value < currentExercise.setReps.size - 1) {
+            _currentSetIndex.value++
+            val targetReps = currentExercise.setReps[_currentSetIndex.value]
+            val setWeight = currentExercise.setWeightsPerCableKg.getOrNull(_currentSetIndex.value)
+                ?: currentExercise.weightPerCableKg
+
+            _workoutParameters.value = _workoutParameters.value.copy(
+                reps = targetReps ?: 0,
+                weightPerCableKg = setWeight,
+                isAMRAP = targetReps == null
+            )
+
+            repCounter.resetCountsOnly()
+            resetAutoStopState()
+            startWorkout(skipCountdown = true)
+        } else {
+            // All sets complete
+            _workoutState.value = WorkoutState.Completed
+            _loadedRoutine.value = null
+            _currentSetIndex.value = 0
+            _currentExerciseIndex.value = 0
+            repCounter.reset()
+            resetAutoStopState()
+        }
+    }
+
+    /**
+     * Progress to the next set or exercise in a routine.
+     */
+    private fun startNextSetOrExercise() {
+        val currentState = _workoutState.value
+        if (currentState is WorkoutState.Completed) return
+        if (currentState !is WorkoutState.Resting) return
+
+        val routine = _loadedRoutine.value ?: return
+        val currentExercise = routine.exercises.getOrNull(_currentExerciseIndex.value) ?: return
+
+        if (_currentSetIndex.value < currentExercise.setReps.size - 1) {
+            // More sets in current exercise
+            _currentSetIndex.value++
+            val targetReps = currentExercise.setReps[_currentSetIndex.value]
+            val setWeight = currentExercise.setWeightsPerCableKg.getOrNull(_currentSetIndex.value)
+                ?: currentExercise.weightPerCableKg
+
+            _workoutParameters.value = _workoutParameters.value.copy(
+                reps = targetReps ?: 0,
+                weightPerCableKg = setWeight,
+                isAMRAP = targetReps == null
+            )
+
+            repCounter.resetCountsOnly()
+            resetAutoStopState()
+            startWorkout(skipCountdown = true)
+        } else {
+            // Move to next exercise
+            if (_currentExerciseIndex.value < routine.exercises.size - 1) {
+                _currentExerciseIndex.value++
+                _currentSetIndex.value = 0
+
+                val nextExercise = routine.exercises[_currentExerciseIndex.value]
+                val nextSetReps = nextExercise.setReps.getOrNull(0)
+                val nextSetWeight = nextExercise.setWeightsPerCableKg.getOrNull(0)
+                    ?: nextExercise.weightPerCableKg
+
+                _workoutParameters.value = _workoutParameters.value.copy(
+                    weightPerCableKg = nextSetWeight,
+                    reps = nextSetReps ?: 0,
+                    workoutType = nextExercise.workoutType,
+                    progressionRegressionKg = nextExercise.progressionKg,
+                    selectedExerciseId = nextExercise.exercise.id,
+                    isAMRAP = nextSetReps == null
+                )
+
+                repCounter.reset()
+                resetAutoStopState()
+                startWorkout(skipCountdown = true)
+            } else {
+                // Routine complete
+                _workoutState.value = WorkoutState.Completed
+                _loadedRoutine.value = null
+                _currentSetIndex.value = 0
+                _currentExerciseIndex.value = 0
+                currentRoutineSessionId = null
+                currentRoutineName = null
+                repCounter.reset()
+                resetAutoStopState()
+            }
+        }
+    }
+
+    /**
+     * Skip the current rest timer and immediately start the next set/exercise.
+     */
+    fun skipRest() {
+        if (_workoutState.value is WorkoutState.Resting) {
+            restTimerJob?.cancel()
+            restTimerJob = null
+
+            if (isSingleExerciseMode()) {
+                advanceToNextSetInSingleExercise()
+            } else {
+                startNextSetOrExercise()
+            }
+        }
+    }
+
+    /**
+     * Manually trigger starting the next set when autoplay is disabled.
+     * Called from UI when user taps "Start Next Set" button.
+     */
+    fun startNextSet() {
+        val state = _workoutState.value
+        if (state is WorkoutState.Resting && state.restSecondsRemaining == 0) {
+            if (isSingleExerciseMode()) {
+                advanceToNextSetInSingleExercise()
+            } else {
+                startNextSetOrExercise()
+            }
         }
     }
 }

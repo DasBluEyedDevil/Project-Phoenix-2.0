@@ -10,6 +10,8 @@ import org.koin.android.ext.koin.androidContext
 
 import com.example.vitruvianredux.data.repository.AndroidBleRepository
 import com.example.vitruvianredux.data.repository.BleRepository
+import com.example.vitruvianredux.util.AndroidCsvExporter
+import com.example.vitruvianredux.util.CsvExporter
 
 actual val platformModule: Module = module {
     single { DriverFactory(androidContext()) }
@@ -18,4 +20,5 @@ actual val platformModule: Module = module {
         val preferences = androidContext().getSharedPreferences("vitruvian_preferences", Context.MODE_PRIVATE)
         SharedPreferencesSettings(preferences)
     }
+    single<CsvExporter> { AndroidCsvExporter(androidContext()) }
 }

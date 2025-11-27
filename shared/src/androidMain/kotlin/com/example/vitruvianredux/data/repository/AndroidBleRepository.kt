@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+private val logRepo = ConnectionLogRepository.instance
+
 class AndroidBleRepository(
     private val context: Context
 ) : BleRepository {
@@ -37,6 +39,9 @@ class AndroidBleRepository(
     private val _handleState = MutableStateFlow(HandleState())
     override val handleState: StateFlow<HandleState> = _handleState.asStateFlow()
 
+    // Rep events flow - will be populated when BLE manager parses rep notifications
+    override val repEvents: Flow<RepNotification> = bleManager.repEvents
+
     private val foundDevicesMap = mutableMapOf<String, ScannedDevice>()
 
     private val scanCallback = object : ScanCallback() {
@@ -44,7 +49,7 @@ class AndroidBleRepository(
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             val name = device.name ?: result.scanRecord?.deviceName ?: return
-            
+
             // Filter for Vitruvian devices
             if (name.startsWith("Vee_") || name.startsWith("VIT")) {
                 val scannedDevice = ScannedDevice(
@@ -52,7 +57,18 @@ class AndroidBleRepository(
                     address = device.address,
                     rssi = result.rssi
                 )
-                
+
+                // Only log if this is a new device
+                if (!foundDevicesMap.containsKey(device.address)) {
+                    logRepo.info(
+                        LogEventType.DEVICE_FOUND,
+                        "Found Vitruvian device",
+                        name,
+                        device.address,
+                        "RSSI: ${result.rssi} dBm"
+                    )
+                }
+
                 foundDevicesMap[device.address] = scannedDevice
                 _scannedDevices.value = foundDevicesMap.values.toList().sortedByDescending { it.rssi }
             }
@@ -60,7 +76,11 @@ class AndroidBleRepository(
 
         override fun onScanFailed(errorCode: Int) {
             super.onScanFailed(errorCode)
-            // Handle error
+            logRepo.error(
+                LogEventType.ERROR,
+                "BLE scan failed",
+                details = "Error code: $errorCode"
+            )
         }
     }
 
@@ -69,12 +89,15 @@ class AndroidBleRepository(
         if (bluetoothAdapter?.isEnabled == true) {
             foundDevicesMap.clear()
             _scannedDevices.value = emptyList()
-            
+
             val settings = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build()
-                
+
+            logRepo.info(LogEventType.SCAN_START, "Starting BLE scan for Vitruvian devices")
             scanner?.startScan(null, settings, scanCallback)
+        } else {
+            logRepo.warning(LogEventType.ERROR, "Cannot start scan - Bluetooth is disabled")
         }
     }
 
@@ -82,6 +105,11 @@ class AndroidBleRepository(
     override suspend fun stopScanning() {
         if (bluetoothAdapter?.isEnabled == true) {
             scanner?.stopScan(scanCallback)
+            logRepo.info(
+                LogEventType.SCAN_STOP,
+                "BLE scan stopped",
+                details = "Found ${foundDevicesMap.size} Vitruvian device(s)"
+            )
         }
     }
 

@@ -20,6 +20,8 @@ import no.nordicsemi.android.ble.observer.ConnectionObserver
 import no.nordicsemi.android.ble.data.Data
 import java.util.UUID
 import kotlin.math.abs
+import com.example.vitruvianredux.data.repository.ConnectionLogRepository
+import com.example.vitruvianredux.data.repository.LogEventType
 
 /**
  * Nordic BLE Manager implementation for Vitruvian machines.
@@ -30,6 +32,7 @@ class VitruvianBleManager(
 ) : BleManager(context) {
 
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val logRepo = ConnectionLogRepository.instance
 
     // Service and Characteristic UUIDs
     private val SERVICE_UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
@@ -50,6 +53,9 @@ class VitruvianBleManager(
     private val _metrics = MutableSharedFlow<WorkoutMetric>(replay = 0)
     val metrics = _metrics.asSharedFlow()
 
+    private val _repEvents = MutableSharedFlow<com.example.vitruvianredux.data.repository.RepNotification>(replay = 0)
+    val repEvents = _repEvents.asSharedFlow()
+
     // Data parsing state
     private var previousPositionA = 0
     private var previousPositionB = 0
@@ -59,41 +65,92 @@ class VitruvianBleManager(
 
     init {
         connectionObserver = object : ConnectionObserver {
+            @SuppressLint("MissingPermission")
             override fun onDeviceConnecting(device: BluetoothDevice) {
                 _connectionState.value = ConnectionState.Connecting
+                logRepo.info(
+                    LogEventType.CONNECT_START,
+                    "Connecting to device",
+                    device.name,
+                    device.address
+                )
             }
 
+            @SuppressLint("MissingPermission")
             override fun onDeviceConnected(device: BluetoothDevice) {
                 _connectionState.value = ConnectionState.Connected(device.name ?: "Unknown", device.address)
+                logRepo.info(
+                    LogEventType.CONNECT_SUCCESS,
+                    "Device connected successfully",
+                    device.name,
+                    device.address
+                )
             }
 
+            @SuppressLint("MissingPermission")
             override fun onDeviceFailedToConnect(device: BluetoothDevice, reason: Int) {
                 _connectionState.value = ConnectionState.Error("Failed to connect: $reason")
+                logRepo.error(
+                    LogEventType.CONNECT_FAIL,
+                    "Failed to connect to device (reason: $reason)",
+                    device.name,
+                    device.address,
+                    "Reason code: $reason"
+                )
             }
 
+            @SuppressLint("MissingPermission")
             override fun onDeviceReady(device: BluetoothDevice) {
                 // Device is ready to use, start heartbeat
+                logRepo.info(
+                    LogEventType.SERVICE_DISCOVERED,
+                    "Device ready, services discovered",
+                    device.name,
+                    device.address,
+                    "TX: ${txCharacteristic != null}, RX: ${rxCharacteristic != null}, Monitor: ${monitorCharacteristic != null}"
+                )
                 startHeartbeat()
             }
 
+            @SuppressLint("MissingPermission")
             override fun onDeviceDisconnecting(device: BluetoothDevice) {
-                // Disconnecting
+                logRepo.info(
+                    LogEventType.DISCONNECT,
+                    "Device disconnecting",
+                    device.name,
+                    device.address
+                )
             }
 
+            @SuppressLint("MissingPermission")
             override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
                 _connectionState.value = ConnectionState.Disconnected
+                logRepo.info(
+                    LogEventType.DISCONNECT,
+                    "Device disconnected (reason: $reason)",
+                    device.name,
+                    device.address,
+                    "Reason code: $reason"
+                )
             }
         }
     }
 
     override fun initialize() {
+        logRepo.debug(LogEventType.MTU_CHANGED, "Requesting MTU 512")
         requestMtu(512).enqueue()
-        
+
         setNotificationCallback(rxCharacteristic).with { device, data ->
             // Keep RX parsing for command responses or legacy notifications
-             parsePacket(data) 
+            logRepo.debug(
+                LogEventType.NOTIFICATION,
+                "RX notification received",
+                details = "Size: ${data.size()} bytes"
+            )
+            parsePacket(data)
         }
         enableNotifications(rxCharacteristic).enqueue()
+        logRepo.info(LogEventType.NOTIFICATION, "Enabled RX notifications")
     }
 
     private fun startHeartbeat() {
@@ -150,6 +207,11 @@ class VitruvianBleManager(
     }
 
     fun sendCommand(command: ByteArray) {
+        logRepo.debug(
+            LogEventType.COMMAND_SENT,
+            "Sending command",
+            details = "Size: ${command.size} bytes, Data: ${command.joinToString(" ") { "%02X".format(it) }}"
+        )
         writeCharacteristic(txCharacteristic, command, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
             .enqueue()
     }

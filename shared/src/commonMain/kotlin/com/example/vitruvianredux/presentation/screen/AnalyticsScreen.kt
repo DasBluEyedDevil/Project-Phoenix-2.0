@@ -31,12 +31,10 @@ import com.example.vitruvianredux.domain.model.WorkoutSession
 import com.example.vitruvianredux.presentation.viewmodel.MainViewModel
 import com.example.vitruvianredux.ui.theme.Spacing
 import com.example.vitruvianredux.presentation.components.*
-// TODO: CsvExporter needs platform-specific implementation
-// import com.example.vitruvianredux.util.CsvExporter
+import com.example.vitruvianredux.util.CsvExporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-// TODO: Platform-specific - LocalContext for Android
-// import androidx.compose.ui.platform.LocalContext
+import org.koin.compose.koinInject
 
 import com.example.vitruvianredux.util.KmpUtils
 import com.example.vitruvianredux.data.repository.ExerciseRepository
@@ -344,10 +342,24 @@ fun AnalyticsScreen(
     val pagerState = rememberPagerState(pageCount = { 3 })
     var showExportMenu by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
+    var isExporting by remember { mutableStateOf(false) }
 
-    // TODO: Platform-specific - LocalContext for Android
-    // val context = LocalContext.current
+    // CsvExporter from DI
+    val csvExporter: CsvExporter = koinInject()
     val scope = rememberCoroutineScope()
+
+    // Build exercise names map for export
+    val exerciseNames = remember { mutableStateMapOf<String, String>() }
+    LaunchedEffect(personalRecords, allWorkoutSessions) {
+        val allExerciseIds = personalRecords.map { it.exerciseId } +
+            allWorkoutSessions.mapNotNull { it.exerciseId }
+        allExerciseIds.distinct().forEach { exerciseId ->
+            if (!exerciseNames.containsKey(exerciseId)) {
+                val exercise = viewModel.exerciseRepository.getExerciseById(exerciseId)
+                exerciseNames[exerciseId] = exercise?.name ?: "Unknown Exercise"
+            }
+        }
+    }
 
     // Sync pager with tab selection
     LaunchedEffect(pagerState.currentPage) {
@@ -545,29 +557,147 @@ fun AnalyticsScreen(
     // Export options dialog
     if (showExportMenu) {
         AlertDialog(
-            onDismissRequest = { showExportMenu = false },
+            onDismissRequest = { if (!isExporting) showExportMenu = false },
             title = { Text("Export Data") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.small)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(Spacing.medium),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Choose what to export:", style = MaterialTheme.typography.bodyMedium)
-                    Text("TODO: Export requires platform-specific implementation", style = MaterialTheme.typography.bodySmall)
+
+                    // Export Personal Records
+                    OutlinedButton(
+                        onClick = {
+                            isExporting = true
+                            scope.launch(Dispatchers.Default) {
+                                val result = csvExporter.exportPersonalRecords(
+                                    personalRecords = personalRecords,
+                                    exerciseNames = exerciseNames.toMap(),
+                                    weightUnit = weightUnit,
+                                    formatWeight = viewModel::formatWeight
+                                )
+                                isExporting = false
+                                result.fold(
+                                    onSuccess = { path ->
+                                        exportMessage = "Exported to: $path"
+                                        csvExporter.shareCSV(path, "personal_records.csv")
+                                    },
+                                    onFailure = { error ->
+                                        exportMessage = "Export failed: ${error.message}"
+                                    }
+                                )
+                                showExportMenu = false
+                            }
+                        },
+                        enabled = !isExporting && personalRecords.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.EmojiEvents, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Personal Records (${personalRecords.size})")
+                    }
+
+                    // Export Workout History
+                    OutlinedButton(
+                        onClick = {
+                            isExporting = true
+                            scope.launch(Dispatchers.Default) {
+                                val result = csvExporter.exportWorkoutHistory(
+                                    workoutSessions = allWorkoutSessions,
+                                    exerciseNames = exerciseNames.toMap(),
+                                    weightUnit = weightUnit,
+                                    formatWeight = viewModel::formatWeight
+                                )
+                                isExporting = false
+                                result.fold(
+                                    onSuccess = { path ->
+                                        exportMessage = "Exported to: $path"
+                                        csvExporter.shareCSV(path, "workout_history.csv")
+                                    },
+                                    onFailure = { error ->
+                                        exportMessage = "Export failed: ${error.message}"
+                                    }
+                                )
+                                showExportMenu = false
+                            }
+                        },
+                        enabled = !isExporting && allWorkoutSessions.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Workout History (${allWorkoutSessions.size})")
+                    }
+
+                    // Export PR Progression
+                    OutlinedButton(
+                        onClick = {
+                            isExporting = true
+                            scope.launch(Dispatchers.Default) {
+                                val result = csvExporter.exportPRProgression(
+                                    personalRecords = personalRecords,
+                                    exerciseNames = exerciseNames.toMap(),
+                                    weightUnit = weightUnit,
+                                    formatWeight = viewModel::formatWeight
+                                )
+                                isExporting = false
+                                result.fold(
+                                    onSuccess = { path ->
+                                        exportMessage = "Exported to: $path"
+                                        csvExporter.shareCSV(path, "pr_progression.csv")
+                                    },
+                                    onFailure = { error ->
+                                        exportMessage = "Export failed: ${error.message}"
+                                    }
+                                )
+                                showExportMenu = false
+                            }
+                        },
+                        enabled = !isExporting && personalRecords.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("PR Progression")
+                    }
+
+                    if (isExporting) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = { showExportMenu = false },
-                    modifier = Modifier.height(56.dp), // Material 3 Expressive: Taller button
-                    shape = RoundedCornerShape(20.dp) // Material 3 Expressive: More rounded
+                    enabled = !isExporting,
+                    modifier = Modifier.height(56.dp),
+                    shape = RoundedCornerShape(20.dp)
                 ) {
                     Text(
                         "Cancel",
-                        style = MaterialTheme.typography.titleMedium, // Material 3 Expressive: Larger text
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest, // Material 3 Expressive: Higher contrast
-            shape = RoundedCornerShape(28.dp) // Material 3 Expressive: Very rounded for dialogs
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            shape = RoundedCornerShape(28.dp)
         )
+    }
+
+    // Export result snackbar
+    exportMessage?.let { message ->
+        Snackbar(
+            modifier = Modifier
+                .padding(16.dp),
+            action = {
+                TextButton(onClick = { exportMessage = null }) {
+                    Text("Dismiss")
+                }
+            }
+        ) {
+            Text(message)
+        }
     }
 }

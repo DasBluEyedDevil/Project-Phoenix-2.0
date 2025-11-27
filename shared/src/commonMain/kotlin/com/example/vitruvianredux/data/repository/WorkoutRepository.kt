@@ -50,6 +50,9 @@ interface WorkoutRepository {
     // Personal records
     fun getAllPersonalRecords(): Flow<List<PersonalRecordEntity>>
     suspend fun updatePRIfBetter(exerciseId: String, weightKg: Float, reps: Int, mode: String)
+
+    // Metrics storage
+    suspend fun saveMetrics(sessionId: String, metrics: List<com.example.vitruvianredux.domain.model.WorkoutMetric>)
 }
 
 /**
@@ -95,4 +98,5 @@ class StubWorkoutRepository : WorkoutRepository {
 
     override fun getAllPersonalRecords() = flowOf(emptyList<PersonalRecordEntity>())
     override suspend fun updatePRIfBetter(exerciseId: String, weightKg: Float, reps: Int, mode: String) {}
+    override suspend fun saveMetrics(sessionId: String, metrics: List<com.example.vitruvianredux.domain.model.WorkoutMetric>) {}
 }

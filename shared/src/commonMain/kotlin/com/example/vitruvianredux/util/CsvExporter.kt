@@ -5,11 +5,10 @@ import com.example.vitruvianredux.domain.model.WeightUnit
 import com.example.vitruvianredux.domain.model.WorkoutSession
 
 /**
- * Platform-specific CSV exporter for workout data.
- *
- * Implementations should handle file I/O and sharing appropriate to the platform.
+ * Interface for CSV export functionality.
+ * Platform-specific implementations handle file I/O and sharing.
  */
-expect class CsvExporter {
+interface CsvExporter {
     /**
      * Export personal records to CSV file
      *
@@ -65,4 +64,34 @@ expect class CsvExporter {
      * @param fileName Display name for the file
      */
     fun shareCSV(fileUri: String, fileName: String)
+}
+
+/**
+ * Stub implementation for platforms without export support
+ */
+class StubCsvExporter : CsvExporter {
+    override fun exportPersonalRecords(
+        personalRecords: List<PersonalRecord>,
+        exerciseNames: Map<String, String>,
+        weightUnit: WeightUnit,
+        formatWeight: (Float, WeightUnit) -> String
+    ): Result<String> = Result.failure(NotImplementedError("CSV export not available on this platform"))
+
+    override fun exportWorkoutHistory(
+        workoutSessions: List<WorkoutSession>,
+        exerciseNames: Map<String, String>,
+        weightUnit: WeightUnit,
+        formatWeight: (Float, WeightUnit) -> String
+    ): Result<String> = Result.failure(NotImplementedError("CSV export not available on this platform"))
+
+    override fun exportPRProgression(
+        personalRecords: List<PersonalRecord>,
+        exerciseNames: Map<String, String>,
+        weightUnit: WeightUnit,
+        formatWeight: (Float, WeightUnit) -> String
+    ): Result<String> = Result.failure(NotImplementedError("CSV export not available on this platform"))
+
+    override fun shareCSV(fileUri: String, fileName: String) {
+        // No-op
+    }
 }

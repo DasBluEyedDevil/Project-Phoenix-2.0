@@ -196,4 +196,12 @@ class SqlDelightWorkoutRepository(
     override suspend fun updatePRIfBetter(exerciseId: String, weightKg: Float, reps: Int, mode: String) {
         // Logic to check PR and insert
     }
+
+    override suspend fun saveMetrics(
+        sessionId: String,
+        metrics: List<com.example.vitruvianredux.domain.model.WorkoutMetric>
+    ) {
+        // TODO: Add MetricSample table queries when schema is extended
+        // For now, metrics are not persisted
+    }
 }

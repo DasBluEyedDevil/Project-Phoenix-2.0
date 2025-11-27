@@ -2,6 +2,64 @@ package com.example.vitruvianredux.util
 
 import kotlinx.datetime.*
 import kotlin.math.roundToInt
+import kotlin.random.Random
+
+/**
+ * Represents a date for streak calculations (KMP-compatible)
+ */
+data class KmpLocalDate(
+    val year: Int,
+    val month: Int,
+    val dayOfMonth: Int
+) : Comparable<KmpLocalDate> {
+
+    fun minusDays(days: Int): KmpLocalDate {
+        val localDate = LocalDate(year, month, dayOfMonth)
+        val result = localDate.minus(days, DateTimeUnit.DAY)
+        return KmpLocalDate(result.year, result.monthNumber, result.dayOfMonth)
+    }
+
+    fun plusDays(days: Int): KmpLocalDate {
+        val localDate = LocalDate(year, month, dayOfMonth)
+        val result = localDate.plus(days, DateTimeUnit.DAY)
+        return KmpLocalDate(result.year, result.monthNumber, result.dayOfMonth)
+    }
+
+    fun isBefore(other: KmpLocalDate): Boolean {
+        return this < other
+    }
+
+    fun isAfter(other: KmpLocalDate): Boolean {
+        return this > other
+    }
+
+    override fun compareTo(other: KmpLocalDate): Int {
+        val yearCmp = year.compareTo(other.year)
+        if (yearCmp != 0) return yearCmp
+        val monthCmp = month.compareTo(other.month)
+        if (monthCmp != 0) return monthCmp
+        return dayOfMonth.compareTo(other.dayOfMonth)
+    }
+
+    /**
+     * Returns unique key for grouping (e.g., for distinct dates)
+     */
+    fun toKey(): String = "$year-$month-$dayOfMonth"
+
+    companion object {
+        fun today(): KmpLocalDate {
+            val now = Clock.System.now()
+            val localDate = now.toLocalDateTime(TimeZone.currentSystemDefault()).date
+            return KmpLocalDate(localDate.year, localDate.monthNumber, localDate.dayOfMonth)
+        }
+
+        fun fromTimestamp(timestampMillis: Long): KmpLocalDate {
+            val instant = Instant.fromEpochMilliseconds(timestampMillis)
+            val localDate = instant.toLocalDateTime(TimeZone.currentSystemDefault()).date
+            return KmpLocalDate(localDate.year, localDate.monthNumber, localDate.dayOfMonth)
+        }
+    }
+}
 
 /**
  * KMP-compatible utility functions to replace Java dependencies
@@ -47,6 +105,19 @@ object KmpUtils {
                 val minute = dateTime.minute.toString().padStart(2, '0')
                 val amPm = if (dateTime.hour < 12) "AM" else "PM"
                 "$hour:$minute $amPm"
+            }
+            "HH:mm:ss" -> {
+                val hour = dateTime.hour.toString().padStart(2, '0')
+                val minute = dateTime.minute.toString().padStart(2, '0')
+                val second = dateTime.second.toString().padStart(2, '0')
+                "$hour:$minute:$second"
+            }
+            "HH:mm:ss.SSS" -> {
+                val hour = dateTime.hour.toString().padStart(2, '0')
+                val minute = dateTime.minute.toString().padStart(2, '0')
+                val second = dateTime.second.toString().padStart(2, '0')
+                val millis = (instant.toEpochMilliseconds() % 1000).toString().padStart(3, '0')
+                "$hour:$minute:$second.$millis"
             }
             "EEE" -> {
                 dateTime.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() }
@@ -151,6 +222,28 @@ object KmpUtils {
      */
     fun formatDouble(value: Double, decimals: Int): String {
         return formatFloat(value.toFloat(), decimals)
+    }
+
+    /**
+     * Generate a random UUID string (KMP-compatible)
+     * Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+     * where x is a random hex digit and y is 8, 9, a, or b
+     * @return UUID string
+     */
+    fun randomUUID(): String {
+        val hexChars = "0123456789abcdef"
+        val sb = StringBuilder(36)
+
+        for (i in 0 until 36) {
+            when (i) {
+                8, 13, 18, 23 -> sb.append('-')
+                14 -> sb.append('4') // Version 4
+                19 -> sb.append(hexChars[Random.nextInt(4) + 8]) // 8, 9, a, b
+                else -> sb.append(hexChars[Random.nextInt(16)])
+            }
+        }
+
+        return sb.toString()
     }
 }
 

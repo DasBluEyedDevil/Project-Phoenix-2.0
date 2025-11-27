@@ -33,6 +33,34 @@ data class AutoStopUiState(
 )
 
 /**
+ * Handle activity state for auto-start/auto-stop logic.
+ * Tracks the workout phase based on handle position.
+ */
+enum class HandleActivityState {
+    /** Waiting for user to pick up handles (at rest position) */
+    WaitingForRest,
+    /** Handles are lifted and user is actively working */
+    Active,
+    /** Set completed, waiting for rest timer or next action */
+    SetComplete
+}
+
+/**
+ * Rep notification from the Vitruvian machine.
+ * The machine sends rep events with counters that track:
+ * - topCounter: increments when user reaches top of movement (concentric peak)
+ * - completeCounter: increments when user completes the rep (eccentric valley)
+ * - repsRomCount: machine's warmup rep count
+ * - repsSetCount: machine's working set rep count
+ */
+data class RepNotification(
+    val topCounter: Int,
+    val completeCounter: Int,
+    val repsRomCount: Int,
+    val repsSetCount: Int
+)
+
+/**
  * BLE Repository interface - platform-specific implementation required
  * TODO: Implement expect/actual for Android (Nordic BLE) and other platforms
  */
@@ -41,6 +69,7 @@ interface BleRepository {
     val metricsFlow: Flow<WorkoutMetric>
     val scannedDevices: StateFlow<List<ScannedDevice>>
     val handleState: StateFlow<HandleState>
+    val repEvents: Flow<RepNotification>
 
     suspend fun startScanning()
     suspend fun stopScanning()
@@ -63,6 +92,7 @@ class StubBleRepository : BleRepository {
     )
     override val scannedDevices = MutableStateFlow<List<ScannedDevice>>(emptyList())
     override val handleState = MutableStateFlow(HandleState())
+    override val repEvents: Flow<RepNotification> = kotlinx.coroutines.flow.emptyFlow()
 
     override suspend fun startScanning() {}
     override suspend fun stopScanning() {}
