@@ -7,7 +7,7 @@ compose-multiplatform = "1.8.0"
 # Kotlinx
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.8.0"
-kotlinx-datetime = "0.6.1"
+kotlinx-datetime = "0.7.1"
 
 # Compose
 compose-bom = "2025.10.01"
@@ -29,8 +29,8 @@ sqldelight = "2.2.1"
 # Settings/Preferences - Multiplatform
 multiplatform-settings = "1.3.0"
 
-# BLE
-nordic-ble = "2.11.0"
+# BLE - Kable (Kotlin Multiplatform)
+kable = "0.40.0"
 
 # Logging
 kermit = "2.0.5"
@@ -94,9 +94,8 @@ sqldelight-sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", versi
 multiplatform-settings = { module = "com.russhwolf:multiplatform-settings", version.ref = "multiplatform-settings" }
 multiplatform-settings-coroutines = { module = "com.russhwolf:multiplatform-settings-coroutines", version.ref = "multiplatform-settings" }
 
-# BLE (Android-specific)
-nordic-ble = { module = "no.nordicsemi.android:ble", version.ref = "nordic-ble" }
-nordic-ble-ktx = { module = "no.nordicsemi.android:ble-ktx", version.ref = "nordic-ble" }
+# BLE - Kable (Multiplatform)
+kable-core = { module = "com.juul.kable:kable-core", version.ref = "kable" }
 
 # Logging (Multiplatform)
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }

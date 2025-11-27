@@ -8,14 +8,14 @@ import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.koin.android.ext.koin.androidContext
 
-import com.example.vitruvianredux.data.repository.AndroidBleRepository
 import com.example.vitruvianredux.data.repository.BleRepository
+import com.example.vitruvianredux.data.repository.KableBleRepository
 import com.example.vitruvianredux.util.AndroidCsvExporter
 import com.example.vitruvianredux.util.CsvExporter
 
 actual val platformModule: Module = module {
     single { DriverFactory(androidContext()) }
-    single<BleRepository> { AndroidBleRepository(androidContext()) }
+    single<BleRepository> { KableBleRepository() }
     single<Settings> {
         val preferences = androidContext().getSharedPreferences("vitruvian_preferences", Context.MODE_PRIVATE)
         SharedPreferencesSettings(preferences)

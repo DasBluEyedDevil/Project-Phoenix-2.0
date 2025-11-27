@@ -61,8 +61,11 @@ data class RepNotification(
 )
 
 /**
- * BLE Repository interface - platform-specific implementation required
- * TODO: Implement expect/actual for Android (Nordic BLE) and other platforms
+ * BLE Repository interface for Vitruvian machine communication.
+ *
+ * Implementations:
+ * - KableBleRepository (commonMain): Kable-based implementation for Android/iOS
+ * - StubBleRepository (commonMain): No-op stub for platforms without BLE (Desktop)
  */
 interface BleRepository {
     val connectionState: StateFlow<ConnectionState>

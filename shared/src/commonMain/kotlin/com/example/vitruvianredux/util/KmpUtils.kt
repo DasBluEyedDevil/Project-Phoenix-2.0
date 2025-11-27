@@ -3,6 +3,10 @@ package com.example.vitruvianredux.util
 import kotlinx.datetime.*
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import kotlin.time.Clock
+
+// Helper to get current instant
+private fun currentInstant(): Instant = Clock.System.now()
 
 /**
  * Represents a date for streak calculations (KMP-compatible)
@@ -48,7 +52,7 @@ data class KmpLocalDate(
 
     companion object {
         fun today(): KmpLocalDate {
-            val now = Clock.System.now()
+            val now = currentInstant()
             val localDate = now.toLocalDateTime(TimeZone.currentSystemDefault()).date
             return KmpLocalDate(localDate.year, localDate.monthNumber, localDate.dayOfMonth)
         }
@@ -141,7 +145,7 @@ object KmpUtils {
      * @return Relative time string
      */
     fun formatRelativeTimestamp(timestamp: Long): String {
-        val now = Clock.System.now().toEpochMilliseconds()
+        val now = currentInstant().toEpochMilliseconds()
         val diffMs = now - timestamp
         val diffMinutes = diffMs / (1000 * 60)
         val diffHours = diffMinutes / 60
@@ -162,7 +166,7 @@ object KmpUtils {
      * @return Current Unix timestamp in milliseconds
      */
     fun currentTimeMillis(): Long {
-        return Clock.System.now().toEpochMilliseconds()
+        return currentInstant().toEpochMilliseconds()
     }
 
     /**
@@ -170,7 +174,7 @@ object KmpUtils {
      * @return Day of week value (1-7)
      */
     fun currentDayOfWeek(): Int {
-        val now = Clock.System.now()
+        val now = currentInstant()
         val localDate = now.toLocalDateTime(TimeZone.currentSystemDefault()).date
         return localDate.dayOfWeek.isoDayNumber
     }

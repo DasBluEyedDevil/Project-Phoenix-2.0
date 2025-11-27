@@ -8,6 +8,12 @@ plugins {
 }
 
 kotlin {
+    // Global opt-ins for experimental APIs
+    sourceSets.all {
+        languageSettings.optIn("kotlin.time.ExperimentalTime")
+        languageSettings.optIn("kotlinx.coroutines.ExperimentalCoroutinesApi")
+    }
+
     // Android target
     androidTarget {
         compilerOptions {
@@ -78,6 +84,9 @@ kotlin {
 
                 // Ktor Client Core (for Coil network)
                 implementation(libs.ktor.client.core)
+
+                // BLE - Kable (Multiplatform)
+                implementation(libs.kable.core)
             }
         }
 
@@ -98,10 +107,6 @@ kotlin {
 
                 // Koin Android
                 implementation(libs.koin.android)
-
-                // BLE - Nordic Library (Android only for now)
-                implementation(libs.nordic.ble)
-                implementation(libs.nordic.ble.ktx)
 
                 // Ktor OkHttp engine for Android
                 implementation(libs.ktor.client.okhttp)

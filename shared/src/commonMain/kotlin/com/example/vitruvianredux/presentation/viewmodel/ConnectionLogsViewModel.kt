@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.vitruvianredux.data.local.ConnectionLogEntity
 import com.example.vitruvianredux.data.repository.ConnectionLogRepository
 import com.example.vitruvianredux.data.repository.LogLevel
+import kotlin.time.Clock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -123,7 +124,7 @@ class ConnectionLogsViewModel : ViewModel() {
      * Clear logs older than specified hours.
      */
     fun clearOldLogs(hoursOld: Int = 24) {
-        val cutoffTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() - (hoursOld * 60 * 60 * 1000L)
+        val cutoffTime = Clock.System.now().toEpochMilliseconds() - (hoursOld * 60 * 60 * 1000L)
         repository.clearOlderThan(cutoffTime)
     }
 

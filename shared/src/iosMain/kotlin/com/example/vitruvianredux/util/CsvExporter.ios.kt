@@ -3,6 +3,7 @@ package com.example.vitruvianredux.util
 import com.example.vitruvianredux.domain.model.PersonalRecord
 import com.example.vitruvianredux.domain.model.WeightUnit
 import com.example.vitruvianredux.domain.model.WorkoutSession
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.*
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
@@ -11,6 +12,7 @@ import platform.UIKit.UIApplication
  * iOS implementation of CsvExporter.
  * Uses Foundation APIs for file I/O and UIActivityViewController for sharing.
  */
+@OptIn(ExperimentalForeignApi::class)
 class IosCsvExporter : CsvExporter {
 
     private val fileManager = NSFileManager.defaultManager
@@ -156,7 +158,6 @@ class IosCsvExporter : CsvExporter {
 
         // Write content using NSString
         val nsContent = NSString.create(string = content)
-        val error: kotlinx.cinterop.ObjCObjectVar<NSError?>? = null
         nsContent.writeToFile(
             filePath,
             atomically = true,
