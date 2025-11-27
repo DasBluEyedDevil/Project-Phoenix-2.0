@@ -131,9 +131,18 @@ SELECT COUNT(*) FROM Exercise;
 selectVideosByExercise:
 SELECT * FROM ExerciseVideo WHERE exerciseId = ?;
 
+countVideos:
+SELECT COUNT(*) FROM ExerciseVideo;
+
 insertVideo:
 INSERT INTO ExerciseVideo (exerciseId, angle, videoUrl, thumbnailUrl, isTutorial)
 VALUES (?, ?, ?, ?, ?);
+
+deleteAllExercises:
+DELETE FROM Exercise;
+
+deleteAllVideos:
+DELETE FROM ExerciseVideo;
 
 -- Workout Session Queries
 selectAllSessions:

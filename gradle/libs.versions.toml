@@ -35,6 +35,9 @@ nordic-ble = "2.11.0"
 # Logging
 kermit = "2.0.5"
 
+# Image Loading (Multiplatform)
+coil = "3.0.4"
+
 # Testing
 junit = "4.13.2"
 junit-version = "1.2.1"
@@ -97,6 +100,16 @@ nordic-ble-ktx = { module = "no.nordicsemi.android:ble-ktx", version.ref = "nord
 
 # Logging (Multiplatform)
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+
+# Image Loading (Multiplatform - Coil 3)
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+
+# Ktor (for Coil network support)
+ktor-client-core = { module = "io.ktor:ktor-client-core", version = "3.1.1" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version = "3.1.1" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version = "3.1.1" }
+ktor-client-java = { module = "io.ktor:ktor-client-java", version = "3.1.1" }
 
 # Testing
 junit = { module = "junit:junit", version.ref = "junit" }

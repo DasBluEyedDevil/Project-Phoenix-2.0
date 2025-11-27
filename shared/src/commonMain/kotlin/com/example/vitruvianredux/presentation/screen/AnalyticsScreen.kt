@@ -34,22 +34,18 @@ import com.example.vitruvianredux.presentation.components.*
 // TODO: CsvExporter needs platform-specific implementation
 // import com.example.vitruvianredux.util.CsvExporter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 // TODO: Platform-specific - LocalContext for Android
 // import androidx.compose.ui.platform.LocalContext
 
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.example.vitruvianredux.util.KmpUtils
 import com.example.vitruvianredux.data.repository.ExerciseRepository
 import com.example.vitruvianredux.domain.model.PersonalRecord
 import androidx.compose.foundation.lazy.items
 
 // Helper function for timestamp formatting
 private fun formatTimestamp(timestamp: Long): String {
-    val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-    return sdf.format(Date(timestamp))
+    return KmpUtils.formatTimestamp(timestamp, "MMM dd, yyyy")
 }
 
 // ProgressionTab composable - List of Personal Records
@@ -161,12 +157,10 @@ fun DashboardTab(
     LaunchedEffect(personalRecords) {
         personalRecords.map { it.exerciseId }.distinct().forEach { exerciseId ->
             if (!exerciseNames.containsKey(exerciseId)) {
-                val exercise = withContext(Dispatchers.IO) {
-                    try {
-                        exerciseRepository.getExerciseById(exerciseId)
-                    } catch (e: Exception) {
-                        null
-                    }
+                val exercise = try {
+                    exerciseRepository.getExerciseById(exerciseId)
+                } catch (e: Exception) {
+                    null
                 }
                 exerciseNames[exerciseId] = exercise?.name ?: "Unknown Exercise"
             }

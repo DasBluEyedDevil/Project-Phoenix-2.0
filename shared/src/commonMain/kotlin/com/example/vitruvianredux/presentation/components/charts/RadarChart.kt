@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -72,7 +73,7 @@ fun RadarChart(
         val centerY = size.height / 2
         val radius = size.width.coerceAtMost(size.height) / 2.5f
         val numPoints = animatedData.size
-        val angleStep = (2 * Math.PI) / numPoints
+        val angleStep = (2 * PI) / numPoints
 
         // Draw grid circles
         for (i in 1..5) {
@@ -87,7 +88,7 @@ fun RadarChart(
 
         // Draw grid lines
         for (i in 0 until numPoints) {
-            val angle = i * angleStep - Math.PI / 2
+            val angle = i * angleStep - PI / 2
             val x = centerX + radius * cos(angle).toFloat()
             val y = centerY + radius * sin(angle).toFloat()
 
@@ -102,7 +103,7 @@ fun RadarChart(
         // Draw data area
         val dataPath = Path().apply {
             animatedData.forEachIndexed { index, (_, value) ->
-                val angle = index * angleStep - Math.PI / 2
+                val angle = index * angleStep - PI / 2
                 val distance = radius * (value / maxValue)
                 val x = centerX + distance * cos(angle).toFloat()
                 val y = centerY + distance * sin(angle).toFloat()
@@ -136,7 +137,7 @@ fun RadarChart(
 
         // Draw data points
         animatedData.forEachIndexed { index, (_, value) ->
-            val angle = index * angleStep - Math.PI / 2
+            val angle = index * angleStep - PI / 2
             val distance = radius * (value / maxValue)
             val x = centerX + distance * cos(angle).toFloat()
             val y = centerY + distance * sin(angle).toFloat()

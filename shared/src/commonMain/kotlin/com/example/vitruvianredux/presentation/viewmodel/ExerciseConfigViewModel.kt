@@ -12,6 +12,7 @@ import com.example.vitruvianredux.domain.model.WorkoutMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.vitruvianredux.util.KmpUtils
 // TODO: Replace Timber with platform-specific logging or multiplatform logging library
 // import timber.log.Timber
 
@@ -330,7 +331,7 @@ class ExerciseConfigViewModel constructor() : ViewModel() {
     // TODO: Implement expect/actual pattern for UUID generation
     private fun generateUUID(): String {
         // Placeholder - needs platform-specific implementation
-        return "uuid-${System.currentTimeMillis()}-${(0..999).random()}"
+        return "uuid-${KmpUtils.currentTimeMillis()}-${(0..999).random()}"
     }
 
     // TODO: Implement expect/actual pattern for logging

@@ -1,6 +1,7 @@
 package com.example.vitruvianredux.di
 
 import com.example.vitruvianredux.data.local.DatabaseFactory
+import com.example.vitruvianredux.data.local.ExerciseImporter
 import com.example.vitruvianredux.data.preferences.PreferencesManager
 import com.example.vitruvianredux.data.preferences.SettingsPreferencesManager
 import com.example.vitruvianredux.data.repository.*
@@ -16,11 +17,14 @@ val commonModule = module {
     // Database
     // DriverFactory is provided by platformModule
     single { DatabaseFactory(get()).createDatabase() }
-    
+
+    // Data Import
+    single { ExerciseImporter(get()) }
+
     // Repositories
     // BleRepository is provided by platformModule
     single<WorkoutRepository> { SqlDelightWorkoutRepository(get()) }
-    single<ExerciseRepository> { SqlDelightExerciseRepository(get()) }
+    single<ExerciseRepository> { SqlDelightExerciseRepository(get(), get()) }
     single<PersonalRecordRepository> { SqlDelightPersonalRecordRepository(get()) }
     
     // Preferences

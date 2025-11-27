@@ -28,6 +28,7 @@ import com.example.vitruvianredux.domain.model.WeightUnit
 import com.example.vitruvianredux.presentation.navigation.NavigationRoutes
 import com.example.vitruvianredux.presentation.viewmodel.MainViewModel
 import com.example.vitruvianredux.ui.theme.Spacing
+import com.example.vitruvianredux.util.format
 import com.example.vitruvianredux.ui.theme.ThemeMode
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -386,7 +387,7 @@ fun HomeActiveProgramCard(
                                             kgToDisplay(exercise.weightPerCableKg, weightUnit)
                                         }
                                         Text(
-                                            text = "${reps ?: "AMRAP"} x ${"%.1f".format(weight)} $weightSuffix",
+                                            text = "${reps ?: "AMRAP"} x ${weight.format(1)} $weightSuffix",
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )

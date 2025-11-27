@@ -15,6 +15,7 @@ import co.touchlab.kermit.Logger
 import com.example.vitruvianredux.domain.model.*
 import com.example.vitruvianredux.domain.usecase.RepCounterFromMachine
 import com.example.vitruvianredux.util.BlePacketFactory
+import com.example.vitruvianredux.util.format
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
+import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * Sealed class hierarchy for workout history items
@@ -54,8 +56,11 @@ data class GroupedRoutineHistoryItem(
     override val timestamp: Long
 ) : HistoryItem()
 
+/**
+ * Represents a dynamic action for the top app bar.
+ */
 data class TopBarAction(
-    val icon: Any, // Placeholder for ImageVector
+    val icon: ImageVector,
     val description: String,
     val onClick: () -> Unit
 )
@@ -68,6 +73,11 @@ class MainViewModel constructor(
     private val repCounter: RepCounterFromMachine,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
+
+    companion object {
+        /** Prefix for temporary single exercise routines to identify them for cleanup */
+        const val TEMP_SINGLE_EXERCISE_PREFIX = "temp_single_"
+    }
 
     val connectionState: StateFlow<ConnectionState> = bleRepository.connectionState
 
@@ -305,7 +315,21 @@ class MainViewModel constructor(
                 _routines.value = routinesList
             }
         }
-        
+
+        // Import exercises if not already imported
+        viewModelScope.launch {
+            try {
+                val result = exerciseRepository.importExercises()
+                if (result.isSuccess) {
+                    Logger.d { "Exercise library initialized" }
+                } else {
+                    Logger.e { "Failed to initialize exercise library: ${result.exceptionOrNull()?.message}" }
+                }
+            } catch (e: Exception) {
+                Logger.e(e) { "Error initializing exercise library" }
+            }
+        }
+
         // Hook up RepCounter
         repCounter.onRepEvent = { event ->
              viewModelScope.launch {
@@ -500,6 +524,10 @@ class MainViewModel constructor(
         _connectionError.value = null
     }
 
+    fun dismissConnectionLostAlert() {
+        _connectionLostDuringWorkout.value = false
+    }
+
     fun cancelAutoConnecting() {
         _isAutoConnecting.value = false
         _connectionError.value = null
@@ -583,7 +611,7 @@ class MainViewModel constructor(
 
     fun formatWeight(kg: Float, unit: WeightUnit): String {
         val value = kgToDisplay(kg, unit)
-        return "%.1f".format(value)
+        return value.format(1)
     }
 
     fun saveRoutine(routine: Routine) {
@@ -615,8 +643,140 @@ class MainViewModel constructor(
         _loadedRoutine.value = null
     }
 
+    // ========== Weekly Program Functions ==========
+
+    fun saveProgram(program: com.example.vitruvianredux.data.local.WeeklyProgramWithDays) {
+        viewModelScope.launch { workoutRepository.saveProgram(program) }
+    }
+
+    fun deleteProgram(programId: String) {
+        viewModelScope.launch { workoutRepository.deleteProgram(programId) }
+    }
+
+    fun activateProgram(programId: String) {
+        viewModelScope.launch { workoutRepository.activateProgram(programId) }
+    }
+
+    fun getProgramById(programId: String): kotlinx.coroutines.flow.Flow<com.example.vitruvianredux.data.local.WeeklyProgramWithDays?> {
+        return workoutRepository.getProgramById(programId)
+    }
+
     fun getCurrentExercise(): RoutineExercise? {
         val routine = _loadedRoutine.value ?: return null
         return routine.exercises.getOrNull(_currentExerciseIndex.value)
     }
+
+    // ========== Just Lift Features ==========
+
+    /**
+     * Enable handle detection for auto-start functionality.
+     * When connected, the machine monitors handle grip to auto-start workout.
+     */
+    fun enableHandleDetection() {
+        Logger.d("MainViewModel: Enabling handle detection for auto-start")
+        // TODO: Implement BLE handle detection when BleRepository supports it
+        // bleRepository.enableHandleDetection()
+    }
+
+    /**
+     * Prepare for Just Lift mode by resetting workout state while preserving weight.
+     * Called when entering Just Lift screen with non-Idle state.
+     */
+    fun prepareForJustLift() {
+        viewModelScope.launch {
+            val currentWeight = _workoutParameters.value.weightPerCableKg
+            Logger.d("prepareForJustLift: Resetting state, preserving weight=$currentWeight kg")
+
+            // Reset workout state to Idle
+            _workoutState.value = WorkoutState.Idle
+            _repCount.value = RepCount()
+
+            // Preserve weight in parameters
+            _workoutParameters.value = _workoutParameters.value.copy(
+                isJustLift = true,
+                useAutoStart = true
+            )
+        }
+    }
+
+    /**
+     * Get saved Single Exercise defaults for a specific exercise and cable configuration.
+     * Returns null if no defaults have been saved yet.
+     */
+    suspend fun getSingleExerciseDefaults(exerciseId: String, cableConfig: String): com.example.vitruvianredux.data.preferences.SingleExerciseDefaults? {
+        return preferencesManager.getSingleExerciseDefaults(exerciseId, cableConfig)
+    }
+
+    /**
+     * Save Single Exercise defaults for a specific exercise and cable configuration.
+     */
+    fun saveSingleExerciseDefaults(defaults: com.example.vitruvianredux.data.preferences.SingleExerciseDefaults) {
+        viewModelScope.launch {
+            preferencesManager.saveSingleExerciseDefaults(defaults)
+            Logger.d("saveSingleExerciseDefaults: exerciseId=${defaults.exerciseId}, cableConfig=${defaults.cableConfig}")
+        }
+    }
+
+    /**
+     * Get saved Just Lift defaults.
+     * Returns null if no defaults have been saved yet.
+     */
+    suspend fun getJustLiftDefaults(): JustLiftDefaults? {
+        // TODO: Implement preferences storage for Just Lift defaults
+        // return preferencesManager.getJustLiftDefaults()
+        return null
+    }
+
+    /**
+     * Save Just Lift defaults for next session.
+     */
+    fun saveJustLiftDefaults(defaults: JustLiftDefaults) {
+        viewModelScope.launch {
+            // TODO: Implement preferences storage for Just Lift defaults
+            // preferencesManager.saveJustLiftDefaults(defaults)
+            Logger.d("saveJustLiftDefaults: weight=${defaults.weightPerCableKg}kg, mode=${defaults.workoutModeId}")
+        }
+    }
+}
+
+/**
+ * Data class for storing Just Lift session defaults.
+ */
+data class JustLiftDefaults(
+    val weightPerCableKg: Float,
+    val weightChangePerRep: Int, // In display units (kg or lbs based on user preference)
+    val workoutModeId: Int, // 0=OldSchool, 1=Pump, 2=Echo
+    val eccentricLoadPercentage: Int = 100,
+    val echoLevelValue: Int = 1 // 0=Hard, 1=Harder, 2=Hardest, 3=Epic
+) {
+    /**
+     * Convert stored mode ID to WorkoutType
+     */
+    fun toWorkoutType(): WorkoutType = when (workoutModeId) {
+        0 -> WorkoutType.Program(ProgramMode.OldSchool)
+        1 -> WorkoutType.Program(ProgramMode.Pump)
+        2 -> WorkoutType.Echo(
+            level = EchoLevel.entries.getOrElse(echoLevelValue) { EchoLevel.HARDER },
+            eccentricLoad = getEccentricLoad()
+        )
+        else -> WorkoutType.Program(ProgramMode.OldSchool)
+    }
+
+    /**
+     * Get EccentricLoad from stored percentage
+     */
+    fun getEccentricLoad(): EccentricLoad = when (eccentricLoadPercentage) {
+        0 -> EccentricLoad.LOAD_0
+        50 -> EccentricLoad.LOAD_50
+        75 -> EccentricLoad.LOAD_75
+        100 -> EccentricLoad.LOAD_100
+        125 -> EccentricLoad.LOAD_125
+        150 -> EccentricLoad.LOAD_150
+        else -> EccentricLoad.LOAD_100
+    }
+
+    /**
+     * Get EchoLevel from stored value
+     */
+    fun getEchoLevel(): EchoLevel = EchoLevel.entries.getOrElse(echoLevelValue) { EchoLevel.HARDER }
 }

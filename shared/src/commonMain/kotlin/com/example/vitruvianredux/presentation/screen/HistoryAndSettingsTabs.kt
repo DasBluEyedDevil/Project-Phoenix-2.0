@@ -33,8 +33,7 @@ import com.example.vitruvianredux.util.ColorSchemes
 import kotlinx.coroutines.launch
 import com.example.vitruvianredux.presentation.components.EmptyState
 import com.example.vitruvianredux.ui.theme.*
-import java.text.SimpleDateFormat
-import java.util.*
+import com.example.vitruvianredux.util.KmpUtils
 
 @Composable
 fun HistoryTab(
@@ -1359,25 +1358,15 @@ fun SettingsTab(
 }
 
 private fun formatTimestamp(timestamp: Long): String {
-    val sdf = SimpleDateFormat("MMM dd, yyyy 'at' HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp))
+    // Format as "MMM dd, yyyy at HH:mm"
+    val date = KmpUtils.formatTimestamp(timestamp, "MMM dd, yyyy")
+    val time = KmpUtils.formatTimestamp(timestamp, "HH:mm")
+    return "$date at $time"
 }
 
 @Suppress("unused")  // Available for future UI enhancements
 private fun formatRelativeTimestamp(timestamp: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-    val daysDiff = diff / (24 * 60 * 60 * 1000)
-    
-    val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-    val dateFormat = SimpleDateFormat("MMM dd", Locale.getDefault())
-    
-    return when {
-        daysDiff == 0L -> "Today at ${timeFormat.format(Date(timestamp))}"
-        daysDiff == 1L -> "Yesterday at ${timeFormat.format(Date(timestamp))}"
-        daysDiff < 7 -> "${dateFormat.format(Date(timestamp))} at ${timeFormat.format(Date(timestamp))}"
-        else -> dateFormat.format(Date(timestamp))
-    }
+    return KmpUtils.formatRelativeTimestamp(timestamp)
 }
 
 @Composable
@@ -1419,7 +1408,7 @@ private fun formatDuration(millis: Long): String {
     val totalSeconds = millis / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
 /**

@@ -1,15 +1,23 @@
 package com.example.vitruvianredux.data.preferences
 
+import co.touchlab.kermit.Logger
 import com.example.vitruvianredux.domain.model.WeightUnit
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.set
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class SettingsPreferencesManager(
     private val settings: Settings
 ) : PreferencesManager {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
 
     private val _preferencesFlow = MutableStateFlow(loadPreferences())
     override val preferencesFlow: StateFlow<UserPreferences> = _preferencesFlow.asStateFlow()
@@ -54,20 +62,52 @@ class SettingsPreferencesManager(
     }
 
     override suspend fun getSingleExerciseDefaults(exerciseId: String, cableConfig: String): SingleExerciseDefaults? {
-        // TODO: Serialize/Deserialize JSON string for complex objects
-        return null
+        val key = "exercise_defaults_${exerciseId}_$cableConfig"
+        val jsonString = settings.getStringOrNull(key)
+        return if (jsonString != null) {
+            try {
+                json.decodeFromString<SingleExerciseDefaults>(jsonString)
+            } catch (e: Exception) {
+                Logger.w { "Failed to load exercise defaults for $exerciseId: ${e.message}" }
+                null
+            }
+        } else {
+            null
+        }
     }
 
     override suspend fun saveSingleExerciseDefaults(defaults: SingleExerciseDefaults) {
-        // TODO
+        val key = "exercise_defaults_${defaults.exerciseId}_${defaults.cableConfig}"
+        try {
+            val jsonString = json.encodeToString(defaults)
+            settings[key] = jsonString
+            Logger.d { "Saved exercise defaults for ${defaults.exerciseId}" }
+        } catch (e: Exception) {
+            Logger.e { "Failed to save exercise defaults: ${e.message}" }
+        }
     }
 
     override suspend fun getJustLiftDefaults(): JustLiftDefaults {
-        // TODO
-        return JustLiftDefaults()
+        val jsonString = settings.getStringOrNull("just_lift_defaults")
+        return if (jsonString != null) {
+            try {
+                json.decodeFromString<JustLiftDefaults>(jsonString)
+            } catch (e: Exception) {
+                Logger.w { "Failed to load Just Lift defaults: ${e.message}" }
+                JustLiftDefaults()
+            }
+        } else {
+            JustLiftDefaults()
+        }
     }
 
     override suspend fun saveJustLiftDefaults(defaults: JustLiftDefaults) {
-        // TODO
+        try {
+            val jsonString = json.encodeToString(defaults)
+            settings["just_lift_defaults"] = jsonString
+            Logger.d { "Saved Just Lift defaults" }
+        } catch (e: Exception) {
+            Logger.e { "Failed to save Just Lift defaults: ${e.message}" }
+        }
     }
 }

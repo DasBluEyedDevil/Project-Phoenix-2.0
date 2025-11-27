@@ -16,6 +16,7 @@ import androidx.navigation.NavController
 import com.example.vitruvianredux.data.repository.ExerciseRepository
 import com.example.vitruvianredux.domain.model.WorkoutState
 import com.example.vitruvianredux.presentation.viewmodel.MainViewModel
+import com.example.vitruvianredux.util.format
 
 /**
  * Active workout screen - displays workout controls during an active workout
@@ -120,12 +121,12 @@ fun ActiveWorkoutScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Peak Power: ${"%.1f".format(state.peakPower)} W",
+                        text = "Peak Power: ${state.peakPower.format(1)} W",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Avg Power: ${"%.1f".format(state.averagePower)} W",
+                        text = "Avg Power: ${state.averagePower.format(1)} W",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

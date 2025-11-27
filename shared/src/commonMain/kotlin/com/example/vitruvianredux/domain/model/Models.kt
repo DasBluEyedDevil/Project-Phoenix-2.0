@@ -238,15 +238,16 @@ data class RepEvent(
 )
 
 /**
- * Haptic feedback event types
+ * Haptic feedback event types for workout notifications
  */
 enum class HapticEvent {
-    REP_COMPLETED,
-    WARMUP_COMPLETE,
-    WORKOUT_COMPLETE,
-    WORKOUT_START,
-    WORKOUT_END,
-    ERROR
+    REP_COMPLETED,      // Light haptic + beep sound
+    WARMUP_COMPLETE,    // Strong haptic + beepboop sound
+    WORKOUT_COMPLETE,   // Strong haptic + boopbeepbeep sound
+    WORKOUT_START,      // Light haptic + chirpchirp sound
+    WORKOUT_END,        // Light haptic + chirpchirp sound
+    REST_ENDING,        // Strong haptic + restover sound (5 seconds left in rest timer)
+    ERROR               // Strong haptic (no sound)
 }
 
 /**

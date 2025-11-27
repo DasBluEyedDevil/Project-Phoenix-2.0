@@ -3,6 +3,8 @@ package com.example.vitruvianredux.data.repository
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
+import co.touchlab.kermit.Logger
+import com.example.vitruvianredux.data.local.ExerciseImporter
 import com.example.vitruvianredux.database.VitruvianDatabase
 import com.example.vitruvianredux.domain.model.CableConfiguration
 import com.example.vitruvianredux.domain.model.Exercise
@@ -13,7 +15,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class SqlDelightExerciseRepository(
-    db: VitruvianDatabase
+    db: VitruvianDatabase,
+    private val exerciseImporter: ExerciseImporter
 ) : ExerciseRepository {
 
     private val queries = db.vitruvianDatabaseQueries
@@ -105,8 +108,40 @@ class SqlDelightExerciseRepository(
     }
 
     override suspend fun importExercises(): Result<Unit> {
-        // TODO: Implement JSON import from assets
-        return Result.success(Unit)
+        return withContext(Dispatchers.IO) {
+            try {
+                // Check if exercises are already imported
+                val exerciseCount = queries.countExercises().executeAsOne()
+                val videoCount = queries.countVideos().executeAsOne()
+
+                // If exercises exist but no videos, we need to re-import (videos were added later)
+                val needsReimport = exerciseCount > 0 && videoCount == 0L
+
+                if (exerciseCount == 0L || needsReimport) {
+                    if (needsReimport) {
+                        Logger.d { "Exercises exist ($exerciseCount) but no videos found. Clearing and re-importing..." }
+                        queries.deleteAllVideos()
+                        queries.deleteAllExercises()
+                    }
+                    Logger.d { "Importing exercises from bundled JSON..." }
+                    val result = exerciseImporter.importExercises()
+                    if (result.isSuccess) {
+                        val newVideoCount = queries.countVideos().executeAsOne()
+                        Logger.d { "Successfully imported ${result.getOrNull()} exercises with $newVideoCount videos" }
+                        Result.success(Unit)
+                    } else {
+                        result.exceptionOrNull()?.let { Result.failure(it) }
+                            ?: Result.failure(Exception("Import failed"))
+                    }
+                } else {
+                    Logger.d { "Exercises already imported (exercises: $exerciseCount, videos: $videoCount)" }
+                    Result.success(Unit)
+                }
+            } catch (e: Exception) {
+                Logger.e(e) { "Failed to import exercises" }
+                Result.failure(e)
+            }
+        }
     }
 
     override suspend fun isExerciseLibraryEmpty(): Boolean {
@@ -117,7 +152,6 @@ class SqlDelightExerciseRepository(
     }
 
     override suspend fun updateFromGitHub(): Result<Int> {
-        // TODO: Implement network fetch
-        return Result.success(0)
+        return exerciseImporter.updateFromGitHub()
     }
 }

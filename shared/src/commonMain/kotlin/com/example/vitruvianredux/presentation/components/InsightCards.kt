@@ -14,6 +14,7 @@ import com.example.vitruvianredux.domain.model.PersonalRecord
 import com.example.vitruvianredux.domain.model.WeightUnit
 import com.example.vitruvianredux.domain.model.WorkoutSession
 import com.example.vitruvianredux.presentation.components.charts.*
+import com.example.vitruvianredux.util.KmpUtils
 
 /**
  * Insight card components for workout analytics
@@ -57,7 +58,7 @@ fun MuscleBalanceRadarCard(
                     }
 
                     if (normalizedGroup != "Other") {
-                        counts[normalizedGroup] = counts.getOrDefault(normalizedGroup, 0) + 1
+                        counts[normalizedGroup] = (counts[normalizedGroup] ?: 0) + 1
                         total++
                     }
                 }
@@ -121,7 +122,7 @@ fun ConsistencyGaugeCard(
     modifier: Modifier = Modifier
 ) {
     val stats = remember(workoutSessions) {
-        val thirtyDaysAgo = System.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
+        val thirtyDaysAgo = KmpUtils.currentTimeMillis() - (30L * 24 * 60 * 60 * 1000)
         val count = workoutSessions.count { it.timestamp >= thirtyDaysAgo }
         count
     }

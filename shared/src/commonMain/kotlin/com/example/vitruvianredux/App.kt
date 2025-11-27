@@ -1,12 +1,16 @@
 package com.example.vitruvianredux
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
-import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.Modifier
 import com.example.vitruvianredux.data.repository.ExerciseRepository
-import com.example.vitruvianredux.presentation.navigation.NavGraph
+import com.example.vitruvianredux.presentation.screen.EnhancedMainScreen
+import com.example.vitruvianredux.presentation.screen.SplashScreen
 import com.example.vitruvianredux.presentation.viewmodel.MainViewModel
 import com.example.vitruvianredux.ui.theme.VitruvianTheme
 import com.example.vitruvianredux.ui.theme.ThemeMode
+import kotlinx.coroutines.delay
 import org.koin.compose.KoinContext
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.compose.koinInject
@@ -16,19 +20,34 @@ fun App() {
     KoinContext {
         val viewModel = koinViewModel<MainViewModel>()
         val exerciseRepository = koinInject<ExerciseRepository>()
-        val navController = rememberNavController()
-        
+
         // Theme state - temporarily local, ideally from preferences
         var themeMode by remember { mutableStateOf(ThemeMode.SYSTEM) }
 
+        // Splash screen state
+        var showSplash by remember { mutableStateOf(true) }
+
+        // Hide splash after a short delay (900ms matches parent project)
+        LaunchedEffect(Unit) {
+            delay(900)
+            showSplash = false
+        }
+
         VitruvianTheme(themeMode = themeMode) {
-            NavGraph(
-                navController = navController,
-                viewModel = viewModel,
-                exerciseRepository = exerciseRepository,
-                themeMode = themeMode,
-                onThemeModeChange = { themeMode = it }
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Main content (always rendered, splash overlays it)
+                if (!showSplash) {
+                    EnhancedMainScreen(
+                        viewModel = viewModel,
+                        exerciseRepository = exerciseRepository,
+                        themeMode = themeMode,
+                        onThemeModeChange = { themeMode = it }
+                    )
+                }
+
+                // Splash screen overlay with fade animation
+                SplashScreen(visible = showSplash)
+            }
         }
     }
 }

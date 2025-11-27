@@ -148,18 +148,36 @@ class SqlDelightWorkoutRepository(
         }
     }
 
-    override fun getAllPrograms(): Flow<List<WeeklyProgramWithDays>> {
-        return flowOf(emptyList())
+    // In-memory storage for programs (until SQLDelight schema is extended)
+    private val _programs = kotlinx.coroutines.flow.MutableStateFlow<List<WeeklyProgramWithDays>>(emptyList())
+
+    override fun getAllPrograms(): Flow<List<WeeklyProgramWithDays>> = _programs
+
+    override fun getActiveProgram(): Flow<WeeklyProgramWithDays?> = _programs.map { programs ->
+        programs.find { it.program.isActive }
     }
 
-    override fun getActiveProgram(): Flow<WeeklyProgramWithDays?> {
-        return flowOf(null)
+    override fun getProgramById(programId: String): Flow<WeeklyProgramWithDays?> = _programs.map { programs ->
+        programs.find { it.program.id == programId }
+    }
+
+    override suspend fun saveProgram(program: WeeklyProgramWithDays) {
+        val existingIndex = _programs.value.indexOfFirst { it.program.id == program.program.id }
+        _programs.value = if (existingIndex >= 0) {
+            _programs.value.toMutableList().apply { this[existingIndex] = program }
+        } else {
+            _programs.value + program
+        }
     }
 
     override suspend fun activateProgram(programId: String) {
+        _programs.value = _programs.value.map { pwDays ->
+            pwDays.copy(program = pwDays.program.copy(isActive = pwDays.program.id == programId))
+        }
     }
 
     override suspend fun deleteProgram(programId: String) {
+        _programs.value = _programs.value.filter { it.program.id != programId }
     }
 
     override fun getAllPersonalRecords(): Flow<List<PersonalRecordEntity>> {

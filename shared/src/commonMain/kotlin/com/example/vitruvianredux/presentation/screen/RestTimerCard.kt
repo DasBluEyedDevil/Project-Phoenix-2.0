@@ -295,7 +295,7 @@ fun RestTimerCard(
 private fun formatRestTime(seconds: Int): String {
     val minutes = seconds / 60
     val remainingSeconds = seconds % 60
-    return "%d:%02d".format(minutes, remainingSeconds)
+    return "$minutes:${remainingSeconds.toString().padStart(2, '0')}"
 }
 
 @Composable

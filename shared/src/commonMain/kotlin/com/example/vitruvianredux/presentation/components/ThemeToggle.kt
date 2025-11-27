@@ -10,13 +10,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
-
-// TODO: Import ThemeMode from ui.theme when it's migrated
-enum class ThemeMode {
-    LIGHT,
-    DARK,
-    SYSTEM
-}
+import com.example.vitruvianredux.ui.theme.ThemeMode
 
 /**
  * Compact icon-only theme toggle.

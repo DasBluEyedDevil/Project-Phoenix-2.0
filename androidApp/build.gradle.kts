@@ -103,6 +103,11 @@ dependencies {
     // Logging
     implementation(libs.kermit)
 
+    // Image Loading - Coil 3
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.ktor)
+    implementation(libs.ktor.client.okhttp)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

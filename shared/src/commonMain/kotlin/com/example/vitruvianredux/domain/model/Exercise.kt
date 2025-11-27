@@ -31,13 +31,31 @@ data class Exercise(
     val muscleGroups: String = muscleGroup, // Comma-separated list of primary muscle groups (defaults to muscleGroup for backward compatibility)
     val equipment: String = "",
     val defaultCableConfig: CableConfiguration = CableConfiguration.DOUBLE,
-    val id: String? = null  // Optional exercise library ID for loading videos/thumbnails
+    val id: String? = null,  // Optional exercise library ID for loading videos/thumbnails
+    val isFavorite: Boolean = false, // Whether exercise is marked as favorite
+    val timesPerformed: Int = 0 // Number of times this exercise has been performed
 ) {
     /**
      * Display name for UI (same as name for now)
      */
     val displayName: String
         get() = name
+
+    /**
+     * Resolve the default cable configuration based on equipment.
+     * If equipment suggests single cable use (e.g., single handle), defaults to SINGLE.
+     */
+    fun resolveDefaultCableConfig(): CableConfiguration {
+        // Check if equipment suggests single cable
+        val singleCableEquipment = listOf("SINGLE_HANDLE", "ANKLE_STRAP", "STRAPS")
+        val equipmentList = equipment.uppercase().split(",").map { it.trim() }
+
+        return if (equipmentList.any { it in singleCableEquipment }) {
+            CableConfiguration.SINGLE
+        } else {
+            defaultCableConfig
+        }
+    }
 }
 
 /**

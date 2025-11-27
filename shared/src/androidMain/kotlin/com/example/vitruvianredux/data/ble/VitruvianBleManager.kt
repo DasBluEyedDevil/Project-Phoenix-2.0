@@ -35,9 +35,13 @@ class VitruvianBleManager(
     private val SERVICE_UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
     private val TX_CHAR_UUID = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e") // Write
     private val RX_CHAR_UUID = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e") // Notify
+    private val MONITOR_CHAR_UUID = UUID.fromString("90e991a6-c548-44ed-969b-eb541014eae3") // Read/Notify?
+    private val PROPERTY_CHAR_UUID = UUID.fromString("5fa538ec-d041-42f6-bbd6-c30d475387b7") // Read
 
     private var txCharacteristic: BluetoothGattCharacteristic? = null
     private var rxCharacteristic: BluetoothGattCharacteristic? = null
+    private var monitorCharacteristic: BluetoothGattCharacteristic? = null
+    private var propertyCharacteristic: BluetoothGattCharacteristic? = null
 
     // State
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -50,6 +54,8 @@ class VitruvianBleManager(
     private var previousPositionA = 0
     private var previousPositionB = 0
     private var lastPacketTime = 0L
+    private var lastGoodPosA = 0
+    private var lastGoodPosB = 0
 
     init {
         connectionObserver = object : ConnectionObserver {
@@ -66,7 +72,8 @@ class VitruvianBleManager(
             }
 
             override fun onDeviceReady(device: BluetoothDevice) {
-                // Device is ready to use
+                // Device is ready to use, start heartbeat
+                startHeartbeat()
             }
 
             override fun onDeviceDisconnecting(device: BluetoothDevice) {
@@ -81,10 +88,31 @@ class VitruvianBleManager(
 
     override fun initialize() {
         requestMtu(512).enqueue()
+        
         setNotificationCallback(rxCharacteristic).with { device, data ->
-            parsePacket(data)
+            // Keep RX parsing for command responses or legacy notifications
+             parsePacket(data) 
         }
         enableNotifications(rxCharacteristic).enqueue()
+    }
+
+    private fun startHeartbeat() {
+        scope.launch {
+            while (_connectionState.value is ConnectionState.Connected) {
+                // Poll monitor characteristic every 100ms (Heartbeat + Data)
+                if (monitorCharacteristic != null) {
+                    readCharacteristic(monitorCharacteristic)
+                        .with { _, data -> parseMonitorData(data) }
+                        .enqueue()
+                }
+                
+                // Poll property characteristic every 500ms (Secondary Heartbeat)
+                // We can skip this if monitor is enough, but let's match the reference app roughly
+                // To avoid congestion, we'll just do monitor mostly.
+                
+                kotlinx.coroutines.delay(100)
+            }
+        }
     }
 
     override fun isRequiredServiceSupported(gatt: BluetoothGatt): Boolean {
@@ -92,8 +120,21 @@ class VitruvianBleManager(
         if (service != null) {
             txCharacteristic = service.getCharacteristic(TX_CHAR_UUID)
             rxCharacteristic = service.getCharacteristic(RX_CHAR_UUID)
+            monitorCharacteristic = service.getCharacteristic(MONITOR_CHAR_UUID)
+            propertyCharacteristic = service.getCharacteristic(PROPERTY_CHAR_UUID)
         }
-        return txCharacteristic != null && rxCharacteristic != null
+        
+        // If monitor is not in the main service, try to find it globally (unlikely but safe)
+        if (monitorCharacteristic == null) {
+             gatt.services.forEach { s ->
+                 val m = s.getCharacteristic(MONITOR_CHAR_UUID)
+                 if (m != null) monitorCharacteristic = m
+             }
+        }
+
+        return txCharacteristic != null && rxCharacteristic != null 
+        // We don't strictly require monitor/property to return true, 
+        // to maintain backward compatibility if headers change, but it's needed for heartbeat.
     }
 
     @SuppressLint("MissingPermission")
@@ -113,50 +154,64 @@ class VitruvianBleManager(
             .enqueue()
     }
 
-    private fun parsePacket(data: Data) {
-        if (data.size() < 20) return // Basic length check
+    private fun parseMonitorData(data: Data) {
+        if (data.size() < 16) return
 
-        // TODO: Implement full V1 protocol parsing
-        // Based on previous knowledge:
-        // Bytes 0-1: Header?
-        // Bytes 2-3: Status?
-        // ... positions and loads ...
-        
-        // Mocking parsing for now based on standard byte offsets typically found in these devices
-        // This needs to be verified against the "official_logs" if we had them
-        
         try {
-            // Assuming Little Endian for these values
-            val positionA = data.getIntValue(Data.FORMAT_SINT16, 4) ?: 0
-            val positionB = data.getIntValue(Data.FORMAT_SINT16, 6) ?: 0
-            val loadA = (data.getIntValue(Data.FORMAT_UINT16, 8) ?: 0) / 100f // Assuming scale factor
-            val loadB = (data.getIntValue(Data.FORMAT_UINT16, 10) ?: 0) / 100f
+            // JS Reference:
+            // f0 (0) = ticks low
+            // f1 (2) = ticks high
+            // f2 (4) = PosA
+            // f4 (8) = LoadA
+            // f5 (10) = PosB
+            // f7 (14) = LoadB
+
+            val ticks = data.getIntValue(Data.FORMAT_UINT32, 0) ?: 0
             
-            if (validateSample(positionA, positionB)) {
-                val metric = WorkoutMetric(
-                    timestamp = System.currentTimeMillis(),
-                    loadA = loadA,
-                    loadB = loadB,
-                    positionA = positionA,
-                    positionB = positionB,
-                    status = 0
-                )
-                
-                scope.launch {
-                    _metrics.emit(metric)
-                }
-                
-                previousPositionA = positionA
-                previousPositionB = positionB
+            // Position: UInt16 at 4 and 10
+            var posA = data.getIntValue(Data.FORMAT_UINT16, 4) ?: 0
+            var posB = data.getIntValue(Data.FORMAT_UINT16, 10) ?: 0
+            
+            // Filter spikes (> 50000)
+            if (posA > 50000) posA = lastGoodPosA else lastGoodPosA = posA
+            if (posB > 50000) posB = lastGoodPosB else lastGoodPosB = posB
+
+            // Load: UInt16 at 8 and 14, divide by 100.0
+            val loadARaw = data.getIntValue(Data.FORMAT_UINT16, 8) ?: 0
+            val loadBRaw = data.getIntValue(Data.FORMAT_UINT16, 14) ?: 0
+            
+            val loadA = loadARaw / 100f
+            val loadB = loadBRaw / 100f
+
+            val metric = WorkoutMetric(
+                timestamp = System.currentTimeMillis(), // Or use ticks?
+                loadA = loadA,
+                loadB = loadB,
+                positionA = posA,
+                positionB = posB,
+                status = 0 // Status not in this packet?
+            )
+            
+            scope.launch {
+                _metrics.emit(metric)
             }
+            
+            previousPositionA = posA
+            previousPositionB = posB
+
         } catch (e: Exception) {
             // Parse error
         }
     }
 
+    private fun parsePacket(data: Data) {
+        // Keep legacy parsing or command response handling here
+        // The original logic was likely guessing offsets, so we rely on parseMonitorData now.
+    }
+
     /**
      * Validates the sample to prevent spikes or invalid data.
-     * FIX: Range increased to 30000 (3m) and allows negative values.
+     * Legacy validation - mostly replaced by parseMonitorData logic
      */
     private fun validateSample(posA: Int, posB: Int): Boolean {
         // Check if values are within physical bounds (approx 3 meters max extension)

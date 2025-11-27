@@ -26,9 +26,7 @@ import com.example.vitruvianredux.domain.model.WeightUnit
 import com.example.vitruvianredux.domain.model.WorkoutSession
 import com.example.vitruvianredux.domain.model.currentTimeMillis
 import com.example.vitruvianredux.ui.theme.Spacing
-// TODO: Expect/Actual for platform-specific date formatting
-import java.text.SimpleDateFormat
-import java.util.*
+import com.example.vitruvianredux.util.KmpUtils
 
 /**
  * Hero Strength Score Card - Primary metric showing overall fitness level
@@ -333,9 +331,6 @@ private fun PRListItem(
     formatWeight: (Float, WeightUnit) -> String,
     isFirst: Boolean
 ) {
-    // Simplified date formatting for KMP compatibility (TODO: Use kotlinx-datetime)
-    val dateFormat = remember { SimpleDateFormat("MMM dd", Locale.getDefault()) }
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = if (isFirst)
@@ -359,7 +354,7 @@ private fun PRListItem(
                     maxLines = 1
                 )
                 Text(
-                    text = "${pr.reps} reps • ${dateFormat.format(Date(pr.timestamp))}",
+                    text = "${pr.reps} reps • ${KmpUtils.formatTimestamp(pr.timestamp, "MMM dd, yyyy")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

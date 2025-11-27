@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
@@ -173,7 +174,7 @@ private fun PRCelebrationContent(
                     }
 
                     // Simple rotation transform
-                    val radians = Math.toRadians(rotation.toDouble())
+                    val radians = rotation.toDouble() * PI / 180.0
                     val cosR = cos(radians).toFloat()
                     val sinR = sin(radians).toFloat()
 

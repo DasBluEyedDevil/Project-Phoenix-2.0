@@ -71,9 +71,16 @@ kotlin {
 
                 // Logging
                 implementation(libs.kermit)
+
+                // Image Loading - Coil 3 (Multiplatform)
+                implementation(libs.coil.compose)
+                implementation(libs.coil.network.ktor)
+
+                // Ktor Client Core (for Coil network)
+                implementation(libs.ktor.client.core)
             }
         }
-        
+
         val commonTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
@@ -85,16 +92,19 @@ kotlin {
             dependencies {
                 // Android-specific Coroutines
                 implementation(libs.kotlinx.coroutines.android)
-                
+
                 // SQLDelight Android Driver
                 implementation(libs.sqldelight.android.driver)
-                
+
                 // Koin Android
                 implementation(libs.koin.android)
-                
+
                 // BLE - Nordic Library (Android only for now)
                 implementation(libs.nordic.ble)
                 implementation(libs.nordic.ble.ktx)
+
+                // Ktor OkHttp engine for Android
+                implementation(libs.ktor.client.okhttp)
             }
         }
         
@@ -106,10 +116,13 @@ kotlin {
             iosX64Main.dependsOn(this)
             iosArm64Main.dependsOn(this)
             iosSimulatorArm64Main.dependsOn(this)
-            
+
             dependencies {
                 // SQLDelight Native Driver
                 implementation(libs.sqldelight.native.driver)
+
+                // Ktor Darwin engine for iOS
+                implementation(libs.ktor.client.darwin)
             }
         }
         
@@ -117,12 +130,15 @@ kotlin {
             dependencies {
                 // Compose Desktop
                 implementation(compose.desktop.currentOs)
-                
+
                 // Coroutines Swing for desktop
                 implementation(libs.kotlinx.coroutines.swing)
-                
+
                 // SQLDelight JVM Driver
                 implementation(libs.sqldelight.sqlite.driver)
+
+                // Ktor Java engine for Desktop
+                implementation(libs.ktor.client.java)
             }
         }
     }

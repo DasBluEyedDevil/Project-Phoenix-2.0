@@ -4,6 +4,7 @@ import com.example.vitruvianredux.domain.model.WeightUnit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.Serializable
 
 /**
  * User preferences data class
@@ -19,6 +20,7 @@ data class UserPreferences(
 /**
  * Single exercise defaults for saving/loading exercise configurations
  */
+@Serializable
 data class SingleExerciseDefaults(
     val exerciseId: String,
     val cableConfig: String,
@@ -65,6 +67,7 @@ data class SingleExerciseDefaults(
 /**
  * Just Lift defaults
  */
+@Serializable
 data class JustLiftDefaults(
     val workoutModeId: Int = 0,
     val weightPerCableKg: Float = 20f,
