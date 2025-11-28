@@ -7,9 +7,38 @@ This document provides a granular, screen-by-screen and end-to-end comparison be
 | Aspect | VitruvianProjectPhoenix (Parent) | Project-Phoenix-2.0 (Current) |
 |--------|----------------------------------|-------------------------------|
 | **Platform** | Android Only | Kotlin Multiplatform (Android, iOS, Desktop) |
-| **Version** | 0.5.1-beta (mature) | 0.1.0 (early development) |
+| **Version** | v0.6.0-beta (Nov 2025) | 0.1.0 (early development) |
 | **Maturity** | Production-ready with 20+ screens | Scaffold with 2 basic screens |
 | **Lines of Code** | ~300KB+ source | ~50KB source |
+
+---
+
+## Recent Parent Updates (v0.6.0-beta)
+
+The parent project released **Beta 6 (v0.6.0)** on Nov 26, 2025, introducing new features that increase the migration gap:
+
+### 1. Visual Rep Feedback System
+- **New Logic:** Distinguishes between "Pending" (gray, concentric done) and "Completed" (colored, eccentric done) reps.
+- **Warm-up Reps:** Now count immediately without pending state.
+- **Impact:** Requires updating Rep Counter logic and UI feedback components.
+
+### 2. Analytics Enhancements
+- **Total Volume History:** New bar chart in Insights tab tracking volume per session.
+- **Impact:** Requires new entity/query for volume aggregation and a new chart component.
+
+### 3. Database Schema V24
+- **New Column:** `status` added to `workout_metrics` (MetricSample) table.
+- **Purpose:** Stores raw machine status flags (deload, spotter, etc.) per sample.
+- **Impact:** Schema migration needed for `MetricSample` table.
+
+### 4. UI/UX Improvements
+- **Disconnect Confirmation:** Dialog prevents accidental disconnects.
+- **Orientation-Aware Grid:** `HomeScreen` adapts columns to device orientation.
+- **Compact Routine Buttons:** UI refinement in routine cards.
+
+### 5. BLE Protocol Refinements
+- Corrected rep target calculation (removed +1 offset).
+- Tension release at bottom of final rep.
 
 ---
 

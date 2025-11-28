@@ -19,7 +19,8 @@ object BlePacketFactory {
      */
     fun createWorkoutCommand(
         workoutType: WorkoutType.Program,
-        weightPerCableKg: Float
+        weightPerCableKg: Float,
+        targetReps: Int
     ): ByteArray {
         val buffer = ByteArray(25)
         buffer[0] = BleConstants.Commands.REGULAR_COMMAND
@@ -30,6 +31,11 @@ object BlePacketFactory {
         val weightScaled = (weightPerCableKg * 100).toInt()
         buffer[2] = (weightScaled and 0xFF).toByte()
         buffer[3] = ((weightScaled shr 8) and 0xFF).toByte()
+        
+        // Byte 4: Target Reps
+        // Fix (Beta 6): Send raw target reps. Do NOT add +1 offset.
+        // Machine handles tension release at the end of this count.
+        buffer[4] = targetReps.toByte()
         
         // Remaining bytes are 0 for now (Legacy V1 simplified)
         

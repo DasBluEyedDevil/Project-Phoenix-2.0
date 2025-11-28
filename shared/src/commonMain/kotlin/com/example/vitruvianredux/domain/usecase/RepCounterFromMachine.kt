@@ -235,6 +235,24 @@ class RepCounterFromMachine {
             }
         }
 
+        // Continuous pending rep progress update (Eccentric phase: Top -> Bottom)
+        if (hasPendingRep) {
+            val minA = minRepPosA ?: 0
+            val maxA = maxRepPosA ?: 1000
+            val rangeA = maxA - minA
+            
+            // Calculate progress for Cable A (1.0 at Top, 0.0 at Bottom -> Invert for fill)
+            // We want 0.0 at Top (Start of eccentric) -> 1.0 at Bottom (End of eccentric)
+            if (rangeA > 50) { // Ensure meaningful range
+                val currentPos = posA.coerceIn(minA, maxA)
+                val fractionFromBottom = (currentPos - minA).toFloat() / rangeA.toFloat()
+                // Fraction is 1.0 at Top, 0.0 at Bottom.
+                // We want progress 0.0 at Top, 1.0 at Bottom.
+                val progress = 1.0f - fractionFromBottom
+                pendingRepProgress = progress.coerceIn(0f, 1f)
+            }
+        }
+
         // Update tracking counters AFTER position recording
         lastTopCounter = up
         lastCompleteCounter = down
