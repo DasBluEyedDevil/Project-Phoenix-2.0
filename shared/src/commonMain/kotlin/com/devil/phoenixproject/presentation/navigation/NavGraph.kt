@@ -39,11 +39,9 @@ fun NavGraph(
         // Home screen - workout type selection
         composable(NavigationRoutes.Home.route) {
             HomeScreen(
-                onWorkoutModeSelected = { mode ->
-                    // Navigate to JustLift for all workout modes
-                    // The mode will be passed to the workout configuration
-                    navController.navigate(NavigationRoutes.JustLift.route)
-                }
+                navController = navController,
+                viewModel = viewModel,
+                themeMode = themeMode
             )
         }
 
